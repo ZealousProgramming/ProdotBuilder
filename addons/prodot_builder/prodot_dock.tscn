@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=2]
+[gd_scene load_steps=5 format=2]
 
-[ext_resource path="res://addons/prodot_builder/create_cube_button.gdns" type="Script" id=1]
+[ext_resource path="res://addons/prodot_builder/dock/create_cube_button.gdns" type="Script" id=1]
+[ext_resource path="res://addons/prodot_builder/dock/vertex_mode_button.gdns" type="Script" id=2]
+[ext_resource path="res://addons/prodot_builder/dock/edge_mode_button.gdns" type="Script" id=3]
+[ext_resource path="res://addons/prodot_builder/dock/face_mode_button.gdns" type="Script" id=4]
 
 [node name="Prodot Builder" type="Control"]
 anchor_right = 1.0
@@ -9,13 +12,80 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="CreateCube" type="Button" parent="."]
-anchor_right = 1.0
-anchor_bottom = 1.0
-margin_right = -718.0
-margin_bottom = -505.0
+[node name="DockVC" type="VBoxContainer" parent="."]
+anchor_right = 1.001
+anchor_bottom = 1.002
+margin_left = 1.12247
+margin_right = 1.09839
+margin_bottom = -0.200073
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="CreateCube" type="Button" parent="DockVC"]
+margin_right = 1025.0
+margin_bottom = 20.0
 text = "Create Cube"
 script = ExtResource( 1 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="HSeparator" type="HSeparator" parent="DockVC"]
+margin_top = 24.0
+margin_right = 1025.0
+margin_bottom = 28.0
+
+[node name="Label" type="Label" parent="DockVC"]
+margin_top = 32.0
+margin_right = 1025.0
+margin_bottom = 46.0
+text = "Mode:"
+align = 1
+uppercase = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="ModeHC" type="HBoxContainer" parent="DockVC"]
+margin_top = 50.0
+margin_right = 1025.0
+margin_bottom = 70.0
+grow_horizontal = 2
+alignment = 1
+
+[node name="Vertex" type="Button" parent="DockVC/ModeHC"]
+margin_right = 339.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Vertex"
+script = ExtResource( 2 )
+__meta__ = {
+"_edit_use_anchors_": false,
+"_editor_description_": "Sets the build mode to Vertex. This will allow for the manipulation of vertices, rather than faces or edges."
+}
+
+[node name="Face" type="Button" parent="DockVC/ModeHC"]
+margin_left = 343.0
+margin_right = 682.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Face"
+script = ExtResource( 4 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Edge" type="Button" parent="DockVC/ModeHC"]
+margin_left = 686.0
+margin_right = 1025.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Edge"
+script = ExtResource( 3 )
 __meta__ = {
 "_edit_use_anchors_": false
 }

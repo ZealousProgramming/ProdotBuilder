@@ -12,7 +12,17 @@ _global_script_classes=[ {
 "base": "Button",
 "class": "CreateCubeButton",
 "language": "NativeScript",
-"path": "res://addons/prodot_builder/create_cube_button.gdns"
+"path": "res://addons/prodot_builder/dock/create_cube_button.gdns"
+}, {
+"base": "Button",
+"class": "EdgeModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/edge_mode_button.gdns"
+}, {
+"base": "Button",
+"class": "FaceModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/face_mode_button.gdns"
 }, {
 "base": "EditorPlugin",
 "class": "ProdotBuilderNode",
@@ -23,11 +33,19 @@ _global_script_classes=[ {
 "class": "ProdotMesh",
 "language": "NativeScript",
 "path": "res://addons/prodot_builder/prodot_mesh.gdns"
+}, {
+"base": "Button",
+"class": "VertexModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/vertex_mode_button.gdns"
 } ]
 _global_script_class_icons={
 "CreateCubeButton": "",
+"EdgeModeButton": "",
+"FaceModeButton": "",
 "ProdotBuilderNode": "",
-"ProdotMesh": ""
+"ProdotMesh": "",
+"VertexModeButton": ""
 }
 
 [application]

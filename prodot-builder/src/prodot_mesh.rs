@@ -1,5 +1,5 @@
-use gdnative::prelude::*;
 use gdnative::api::MeshInstance;
+use gdnative::prelude::*;
 
 #[derive(NativeClass)]
 #[inherit(MeshInstance)]
@@ -17,7 +17,5 @@ impl ProdotMesh {
     }
 
     #[export]
-    fn _exit_tree(&self, _owner: TRef<MeshInstance>) {
-
-    }
+    fn _exit_tree(&self, _owner: TRef<MeshInstance>) {}
 }

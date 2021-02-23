@@ -1,21 +1,27 @@
 use gdnative::api::Button;
 use gdnative::prelude::*;
+use crate::prodot_builder::*;
 
 #[derive(NativeClass)]
 #[inherit(Button)]
 #[register_with(Self::register_signals)]
-pub struct CreateCubeButton;
+pub struct VertexModeButton; 
 
 #[methods]
-impl CreateCubeButton {
+impl VertexModeButton {
     fn new(_owner: TRef<Button>) -> Self {
-        CreateCubeButton
+        VertexModeButton
     }
 
     fn register_signals(builder: &ClassBuilder<Self>) {
         builder.add_signal(Signal {
-            name: "create_cube",
-            args: &[],
+            name: "vertex_mode",
+            args: &[SignalArgument {
+                name: "mode",
+                default: Variant::from_i64(BuildMode::Vertex.value()),
+                export_info: ExportInfo::new(VariantType::I64),
+                usage: PropertyUsage::DEFAULT,
+            }],
         });
     }
 
@@ -28,9 +34,6 @@ impl CreateCubeButton {
 
     #[export]
     fn on_click(&self, owner: TRef<Button>) {
-        owner.emit_signal("create_cube", &[]);
+        owner.emit_signal("vertex_mode", &[ Variant::from_i64(BuildMode::Vertex.value()) ] );
     }
-
-    #[export]
-    fn _exit_tree(&self, _owner: TRef<Button>) {}
 }
