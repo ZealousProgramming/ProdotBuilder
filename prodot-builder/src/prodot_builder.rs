@@ -3,6 +3,8 @@ use gdnative::api::{
     Camera,
     Control,
     EditorPlugin,
+    PluginScript,
+    EditorSpatialGizmoPlugin,
     InputEvent,
     InputEventMouseButton,
     InputEventMouseMotion,
@@ -12,6 +14,7 @@ use gdnative::api::{
     ArrayMesh,
     MeshInstance,
     MeshDataTool,
+    NativeScript,
     //ImmediateGeometry,
     Object,
     Resource,
@@ -23,9 +26,10 @@ use gdnative::api::{
 };
 use gdnative::prelude::*;
 
-use std::borrow::{Borrow, BorrowMut};
+//use std::borrow::{Borrow, BorrowMut};
 
 use crate::prodot_utils::*;
+use crate::prodot_gizmo::*;
 
 #[derive(Copy, Clone, Debug, ToVariant, FromVariant)]
 pub enum BuildMode {
@@ -60,6 +64,8 @@ impl BuildMode {
 #[inherit(EditorPlugin)]
 pub struct ProdotBuilderNode {
     dock: Option<Ref<Control, Shared>>,
+    //gizmo: Option<Instance<ProdotGizmo, Shared>>,
+    gizmo: Option<Ref<EditorSpatialGizmoPlugin, Shared>>,
     mesh_scene: Option<Ref<PackedScene, Shared>>,
     selected_node: Option<Ref<MeshInstance, Shared>>,
     gizmo_positions: Vec<Vector2>,
@@ -80,6 +86,7 @@ impl ProdotBuilderNode {
     fn new(_owner: TRef<EditorPlugin>) -> Self {
         ProdotBuilderNode {
             dock: None,
+            gizmo: None,
             mesh_scene: None,
             selected_node: None,
             gizmo_positions: Vec::new(),
@@ -102,6 +109,37 @@ impl ProdotBuilderNode {
         owner.set_input_event_forwarding_always_enabled();
         
         godot_print!("[Prodot Builder]: Enabled");
+        
+        let resource_loader = ResourceLoader::godot_singleton();
+        let gizmo_resource = 
+            resource_loader
+                .load("addons/prodot_builder/prodot_gizmo.gdns", "", false)
+                .unwrap();
+        
+        let gizmo_inst = unsafe {
+            gizmo_resource
+                .assume_safe()
+                .cast::<NativeScript>()
+                .unwrap()
+                //.claim()
+                //.cast_instance::<ProdotGizmo>()
+                //.unwrap()
+        };
+
+        
+        //let gizmo_clone = gizmo_inst.clone();
+        //owner.add_spatial_gizmo_plugin(gizmo_inst);
+        //self.gizmo = Some(gizmo_clone);
+        /*self.gizmo = unsafe  {
+            Some(
+                gizmo_clone
+                    .assume_safe()
+                    .cast_instance::<ProdotGizmo>()
+                    .unwrap()
+                    .claim()
+            )
+
+        };*/
 
         self.mesh_scene = unsafe {
             Some(
@@ -233,7 +271,9 @@ impl ProdotBuilderNode {
 
         // Remove the dock
         owner.remove_control_from_docks(self.dock.unwrap());
-
+        
+        // Free the gizmo
+        //owner.remove_spatial_gizmo_plugin( self.gizmo.take().unwrap() );
 
         // Free the stored istanciated nodes
         unsafe { self.dock.unwrap().assume_safe().queue_free() };
@@ -364,7 +404,7 @@ impl ProdotBuilderNode {
 
         let mut consume_input = false;
         
-        if let Some(node) = self.selected_node {
+        if let Some(_node) = self.selected_node {
             
             self.refresh_gizmos_camera(owner, camera);
 
@@ -518,29 +558,33 @@ impl ProdotBuilderNode {
         if let Some(mesh_inst) = self.selected_node {
             let root_node = unsafe { owner.get_tree().unwrap().assume_safe().root().unwrap().assume_safe().upcast::<Node>() };
             let mesh_node = unsafe { mesh_inst.assume_safe() };
-            let mesh_ref = mesh_node.mesh().unwrap();
-            let mesh = unsafe { mesh_ref.assume_safe() };
-            let mesh_array = mesh.surface_get_arrays(Mesh::ARRAY_VERTEX);
-            let vertex_array = mesh_array.get(0).to_vector3_array();
+            let mesh_ref = mesh_node.mesh();
+            match mesh_ref {
+                Some(mesh_ref) => {
+                    let mesh = unsafe { mesh_ref.assume_safe() };
+                    let mesh_array = mesh.surface_get_arrays(Mesh::ARRAY_VERTEX);
+                    let vertex_array = mesh_array.get(0).to_vector3_array();
 
-            self.gizmo_positions.clear();
-            
-            let mut viewports: Vec<Ref<Viewport>> = Vec::new();
-            self.get_viewports(owner, root_node, viewports.as_mut());
-            for viewport_ref in viewports {
-                let viewport = unsafe { viewport_ref.assume_safe() };
-                if let Some(camera_ref) = viewport.get_camera() {
-                    if viewport.size().length() > 0.0 {
-                        let camera = unsafe { camera_ref.assume_safe()} ;
+                    self.gizmo_positions.clear();
+                    
+                    let mut viewports: Vec<Ref<Viewport>> = Vec::new();
+                    self.get_viewports(owner, root_node, viewports.as_mut());
+                    for viewport_ref in viewports {
+                        let viewport = unsafe { viewport_ref.assume_safe() };
+                        if let Some(camera_ref) = viewport.get_camera() {
+                            if viewport.size().length() > 0.0 {
+                                let camera = unsafe { camera_ref.assume_safe()} ;
 
-                        let mesh_position = mesh_node.global_transform().origin;
-                        for i in 0..vertex_array.len() {
-                            self.gizmo_positions.push(camera.unproject_position(mesh_position + vertex_array.get(i)));
+                                let mesh_position = mesh_node.global_transform().origin;
+                                for i in 0..vertex_array.len() {
+                                    self.gizmo_positions.push(camera.unproject_position(mesh_position + vertex_array.get(i)));
+                                }
+                            }
                         }
                     }
-                }
+                },
+                None => (),
             }
-            
         }
     }
     
@@ -646,7 +690,7 @@ impl ProdotBuilderNode {
         let mesh_pos = unsafe { mesh_node.assume_safe().global_transform().origin };
         let mesh_ref = unsafe { mesh_node.assume_safe().mesh().unwrap() };
         let mesh = unsafe { mesh_ref.assume_safe() };
-        let mesh_array = unsafe { mesh.cast::<ArrayMesh>().unwrap() };
+        let mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
         let mesh_tool = MeshDataTool::new();
         mesh_tool.create_from_surface(mesh_array, 0);
         

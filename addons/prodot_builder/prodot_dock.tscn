@@ -1,9 +1,11 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=7 format=2]
 
-[ext_resource path="res://addons/prodot_builder/dock/create_cube_button.gdns" type="Script" id=1]
-[ext_resource path="res://addons/prodot_builder/dock/vertex_mode_button.gdns" type="Script" id=2]
-[ext_resource path="res://addons/prodot_builder/dock/edge_mode_button.gdns" type="Script" id=3]
-[ext_resource path="res://addons/prodot_builder/dock/face_mode_button.gdns" type="Script" id=4]
+[ext_resource path="res://addons/prodot_builder/dock/create_cube_button.gd" type="Script" id=1]
+[ext_resource path="res://addons/prodot_builder/dock/vertex_mode_button.gd" type="Script" id=2]
+[ext_resource path="res://addons/prodot_builder/dock/edge_mode_button.gd" type="Script" id=3]
+[ext_resource path="res://addons/prodot_builder/dock/object_mode_button.gd" type="Script" id=4]
+[ext_resource path="res://addons/prodot_builder/dock/face_mode_button.gd" type="Script" id=5]
+[ext_resource path="res://addons/prodot_builder/dock/build_mode_button_group.tres" type="ButtonGroup" id=6]
 
 [node name="Prodot Builder" type="Control"]
 anchor_right = 1.0
@@ -47,18 +49,37 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="ModeHC" type="HBoxContainer" parent="DockVC"]
+[node name="ModeVC" type="VBoxContainer" parent="DockVC"]
 margin_top = 50.0
 margin_right = 1025.0
-margin_bottom = 70.0
+margin_bottom = 94.0
+
+[node name="RowOne" type="HBoxContainer" parent="DockVC/ModeVC"]
+margin_right = 1025.0
+margin_bottom = 20.0
 grow_horizontal = 2
 alignment = 1
 
-[node name="Vertex" type="Button" parent="DockVC/ModeHC"]
-margin_right = 339.0
+[node name="Object" type="Button" parent="DockVC/ModeVC/RowOne"]
+margin_right = 510.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 toggle_mode = true
+group = ExtResource( 6 )
+text = "Object"
+script = ExtResource( 4 )
+__meta__ = {
+"_edit_use_anchors_": false,
+"_editor_description_": "Sets the build mode to Vertex. This will allow for the manipulation of vertices, rather than faces or edges."
+}
+
+[node name="Vertex" type="Button" parent="DockVC/ModeVC/RowOne"]
+margin_left = 514.0
+margin_right = 1025.0
+margin_bottom = 20.0
+size_flags_horizontal = 3
+toggle_mode = true
+group = ExtResource( 6 )
 text = "Vertex"
 script = ExtResource( 2 )
 __meta__ = {
@@ -66,26 +87,38 @@ __meta__ = {
 "_editor_description_": "Sets the build mode to Vertex. This will allow for the manipulation of vertices, rather than faces or edges."
 }
 
-[node name="Face" type="Button" parent="DockVC/ModeHC"]
-margin_left = 343.0
-margin_right = 682.0
+[node name="RowTwo" type="HBoxContainer" parent="DockVC/ModeVC"]
+margin_top = 24.0
+margin_right = 1025.0
+margin_bottom = 44.0
+grow_horizontal = 2
+alignment = 1
+
+[node name="Face" type="Button" parent="DockVC/ModeVC/RowTwo"]
+margin_right = 510.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 toggle_mode = true
+group = ExtResource( 6 )
 text = "Face"
-script = ExtResource( 4 )
+script = ExtResource( 5 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="Edge" type="Button" parent="DockVC/ModeHC"]
-margin_left = 686.0
+[node name="Edge" type="Button" parent="DockVC/ModeVC/RowTwo"]
+margin_left = 514.0
 margin_right = 1025.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 toggle_mode = true
+group = ExtResource( 6 )
 text = "Edge"
 script = ExtResource( 3 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
+[connection signal="toggled" from="DockVC/ModeVC/RowOne/Object" to="DockVC/ModeVC/RowOne/Object" method="_on_Object_toggled"]
+[connection signal="toggled" from="DockVC/ModeVC/RowOne/Vertex" to="DockVC/ModeVC/RowOne/Vertex" method="_on_Vertex_toggled"]
+[connection signal="toggled" from="DockVC/ModeVC/RowTwo/Face" to="DockVC/ModeVC/RowTwo/Face" method="_on_Face_toggled"]
+[connection signal="toggled" from="DockVC/ModeVC/RowTwo/Edge" to="DockVC/ModeVC/RowTwo/Edge" method="_on_Edge_toggled"]
