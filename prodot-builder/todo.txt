@@ -1,8 +1,0 @@
-
-	[02-22-2021]
-----------------------------------
-[ ] - Try to manipulate a vertex
-	[ ] - Either try to create a Position3D and 
-		update an linked vertexs position, or 
-		i dunno
-[x] - Get temp gizmo to be placed on vertices properly

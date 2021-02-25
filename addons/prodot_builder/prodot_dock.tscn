@@ -65,6 +65,7 @@ margin_right = 510.0
 margin_bottom = 20.0
 size_flags_horizontal = 3
 toggle_mode = true
+pressed = true
 group = ExtResource( 6 )
 text = "Object"
 script = ExtResource( 4 )
