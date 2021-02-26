@@ -8,20 +8,66 @@
 
 config_version=4
 
-_global_script_classes=[  ]
+_global_script_classes=[ {
+"base": "Button",
+"class": "CreateCubeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/create_cube_button.gdns"
+}, {
+"base": "Button",
+"class": "EdgeModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/edge_mode_button.gdns"
+}, {
+"base": "Button",
+"class": "FaceModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/face_mode_button.gdns"
+}, {
+"base": "Button",
+"class": "ObjectModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/object_mode_button.gdns"
+}, {
+"base": "EditorPlugin",
+"class": "ProdotBuilderPlugin",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/prodot_builder_plugin.gdns"
+}, {
+"base": "Position3D",
+"class": "ProdotGizmo",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/gizmos/prodot_gizmo.gdns"
+}, {
+"base": "MeshInstance",
+"class": "ProdotMesh",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/prodot_mesh.gdns"
+}, {
+"base": "Button",
+"class": "VertexModeButton",
+"language": "NativeScript",
+"path": "res://addons/prodot_builder/dock/vertex_mode_button.gdns"
+} ]
 _global_script_class_icons={
-
+"CreateCubeButton": "",
+"EdgeModeButton": "",
+"FaceModeButton": "",
+"ObjectModeButton": "",
+"ProdotBuilderPlugin": "",
+"ProdotGizmo": "",
+"ProdotMesh": "res://addons/prodot_builder/textures/mesh_icon_v5.png",
+"VertexModeButton": ""
 }
 
 [application]
 
 config/name="ProdotBuilder"
 run/main_scene="res://Testing/World.tscn"
-config/icon="res://icon.png"
 
 [editor_plugins]
 
-enabled=PoolStringArray( "godot-plugin-refresher" )
+enabled=PoolStringArray( "godot-plugin-refresher", "prodot_builder" )
 
 [rendering]
 

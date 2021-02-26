@@ -3,4 +3,5 @@
 [resource]
 flags_transparent = true
 flags_unshaded = true
-albedo_color = Color( 0.980392, 0.607843, 0.607843, 1 )
+params_cull_mode = 2
+albedo_color = Color( 0.980392, 0.607843, 0.607843, 0.227451 )

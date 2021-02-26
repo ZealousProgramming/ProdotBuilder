@@ -1,6 +1,8 @@
 
 	[02-24-2021]
 ----------------------------------
+[ ] - draw imm_geo box for verticesj
+
 [ ] - Try to manipulate a vertex
 	[ ] - Either try to create a Position3D and 
 		update an linked vertexs position, or 

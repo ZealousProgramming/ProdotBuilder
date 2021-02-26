@@ -1,15 +1,17 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=7 format=2]
 
 [ext_resource path="res://addons/prodot_builder/materials/prodot_gizmo_x_material.tres" type="Material" id=1]
 [ext_resource path="res://addons/prodot_builder/materials/prodot_gizmo_y_material.tres" type="Material" id=2]
 [ext_resource path="res://addons/prodot_builder/materials/prodot_gizmo_z_material.tres" type="Material" id=3]
+[ext_resource path="res://addons/prodot_builder/gizmos/prodot_gizmo.gdns" type="Script" id=4]
 
 [sub_resource type="SphereShape" id=1]
 radius = 0.07
 
 [sub_resource type="SphereMesh" id=2]
 
-[node name="ProdotGizmo" type="Spatial"]
+[node name="ProdotGizmo" type="Position3D"]
+script = ExtResource( 4 )
 
 [node name="X" type="StaticBody" parent="."]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0, 0 )
