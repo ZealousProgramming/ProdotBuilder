@@ -3,7 +3,6 @@ use gdnative::api::{
     Camera,
     Control,
     EditorPlugin,
-    EditorSpatialGizmo,
     InputEvent,
     InputEventMouseButton,
     InputEventMouseMotion,
@@ -11,18 +10,16 @@ use gdnative::api::{
     Mesh,
     ArrayMesh,
     MeshInstance,
-    MeshDataTool,
+    //MeshDataTool,
     Object,
     Texture,
     Script,
-    Spatial,
+    //Spatial,
     PackedScene,
-    Position3D,
-    Viewport,
-    World,
+    //Viewport,
+    //World,
 };
 use gdnative::prelude::*;
-use crate::prodot_gizmo::*;
 use crate::prodot_mesh::*;
 use crate::prodot_utils::*;
 
@@ -63,10 +60,7 @@ impl BuildMode {
 pub struct ProdotBuilderPlugin {
     dock: Option<Ref<Control, Shared>>,
     mesh_scene: Option<Ref<PackedScene, Shared>>,
-    gizmo_scene: Option<Ref<PackedScene, Shared>>,
     selected_node: Option<Ref<MeshInstance, Shared>>,
-    gizmo_node: Option<Ref<Spatial, Shared>>,
-    gizmo_positions: Vec<Vector2>,
     active_vertex_index: i32,
     hover_index: i32,
     build_mode: BuildMode,
@@ -85,10 +79,7 @@ impl ProdotBuilderPlugin {
         ProdotBuilderPlugin {
             dock: None,
             mesh_scene: None,
-            gizmo_scene: None,
             selected_node: None,
-            gizmo_node: None,
-            gizmo_positions: Vec::new(),
             active_vertex_index: -1,
             hover_index: -1,
             build_mode: BuildMode::Vertex,
@@ -117,13 +108,6 @@ impl ProdotBuilderPlugin {
             )
         };
 
-        self.gizmo_scene = unsafe {
-            Some(
-                load_scene("addons/prodot_builder/gizmos/prodot_gizmo.tscn")
-                .unwrap()
-            )
-        };
-
         self.dock = unsafe {
             Some(
                 load_scene("addons/prodot_builder/prodot_dock.tscn")
@@ -140,19 +124,12 @@ impl ProdotBuilderPlugin {
 
         owner.add_control_to_dock(EditorPlugin::DOCK_SLOT_RIGHT_BL, self.dock.unwrap());
 
-        let mesh_script = unsafe {
+        let script = unsafe {
             load_resource::<Script>("res://addons/prodot_builder/prodot_mesh.gdns", "Script")
-            .unwrap()
+                .unwrap()
         };
-        /*let gizmo_script = unsafe {
-            load_resource::<Script>("res://addons/prodot_builder/gizmos/prodot_gizmo.gdns", "Script")
-            .unwrap()
-        };*/
-        let mesh_texture = unsafe { load_resource::<Texture>("res://addons/prodot_builder/textures/mesh_icon_v5.png", "Texture").unwrap() };
-        //let gizmo_texture = mesh_texture.clone();
-
-        owner.add_custom_type("ProdotMesh", "MeshInstance", mesh_script, mesh_texture);
-        //owner.add_custom_type("ProdotGizmo", "Spatial", gizmo_script, gizmo_texture);
+        let texture = unsafe { load_resource::<Texture>("res://addons/prodot_builder/textures/mesh_icon_v5.png", "Texture").unwrap() };
+        //owner.add_custom_type("ProdotMesh", "MeshInstance", script, texture);
 
         let create_cube_button = unsafe {
             self.dock
@@ -272,17 +249,13 @@ impl ProdotBuilderPlugin {
     fn _exit_tree(&mut self, owner: TRef<EditorPlugin>) {
         
         //Remove it from the engine
-        owner.remove_custom_type("ProdotMesh");
-        //owner.remove_custom_type("ProdotGizmo");
+        //owner.remove_custom_type("ProdotMesh");
 
         // Remove the dock
         owner.remove_control_from_docks(self.dock.unwrap());
         
         // Free the stored instanciated nodes
         unsafe { self.dock.unwrap().assume_safe().queue_free() };
-        if let Some(gizmo_ref) = self.gizmo_node {
-            unsafe { gizmo_ref.assume_safe().queue_free() };
-        }
         //unsafe { self.object_mode_button.unwrap().assume_safe().queue_free() };
         //unsafe { self.vertex_mode_button.unwrap().assume_safe().queue_free() };
         //unsafe { self.face_mode_button.unwrap().assume_safe().queue_free() };
@@ -291,8 +264,6 @@ impl ProdotBuilderPlugin {
         // Clean up
         self.selected_node = None;
         self.mesh_scene = None;
-        self.gizmo_scene = None;
-        self.gizmo_node = None;
         self.object_mode_button = None;
         self.vertex_mode_button = None;
         self.face_mode_button = None;
@@ -303,7 +274,7 @@ impl ProdotBuilderPlugin {
     #[export]
     fn _process(&mut self, owner: TRef<EditorPlugin>, _delta: f64) {
         match self.selected_node {
-            Some(_x) => {
+            Some(mesh_ref) => {
                 let editor_instance = unsafe { EditorPlugin::get_editor_interface(&owner).unwrap().assume_safe() };
                 let selection = unsafe { editor_instance.get_selection().unwrap().assume_safe() };
                 if selection.get_selected_nodes().len() == 0 {
@@ -311,7 +282,21 @@ impl ProdotBuilderPlugin {
                     self.reset(owner);
                     owner.update_overlays();
                 } else {
-
+                    match self.build_mode {
+                        BuildMode::Object => {},
+                        BuildMode::Vertex => {
+                            let mesh = unsafe { mesh_ref.assume_safe() };
+                            let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
+                            mesh_script
+                                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                    mesh.draw_vertices(owner, self.active_vertex_index, self.hover_index);
+                                })
+                                .ok()
+                                .unwrap();
+                        },
+                        BuildMode::Face => {},
+                        BuildMode::Edge => {},
+                    }
                 }
             },
             None => (),
@@ -326,20 +311,6 @@ impl ProdotBuilderPlugin {
         match unsafe { object.assume_safe().cast::<MeshInstance>() } {
             Some(node) => {
                 self.selected_node = Some(node.claim());
-                match self.build_mode {
-                    BuildMode::Object => {
-
-                    },
-                    BuildMode::Vertex => {
-                        self.refresh_gizmos(owner);
-                    },
-                    BuildMode::Face => {
-
-                    },
-                    BuildMode::Edge => {
-
-                    },
-                }
                 owner.update_overlays();
             }
             None => self.selected_node = None,
@@ -352,13 +323,9 @@ impl ProdotBuilderPlugin {
             Some(_node) => {
                 return true;
             }
-            None => {
-                self.selected_node = None;
-                
-            },
+            None => self.selected_node = None,
         }
         self.reset(owner);
-        self.gizmo_positions.clear();
         owner.update_overlays();
         return false;
     }
@@ -367,60 +334,9 @@ impl ProdotBuilderPlugin {
     fn forward_spatial_force_draw_over_viewport(
         &mut self, _owner: TRef<EditorPlugin>, overlay: Ref<Control>,
     ) {
-
-        if let Some(_node) = self.selected_node {
-        
-            let overlay_ref = unsafe { overlay.assume_safe() };
-            let alpha  = 0.7;
-            let peach_color = Color::rgba(0.98431, 0.39216, 0.47451, alpha);
-            let white_color = Color::rgba(1.0, 1.0, 1.0, alpha);
-            let plum_color = Color::rgba(0.16078, 0.19608, 0.32157, alpha);
-            for gizmo_index in 0..self.gizmo_positions.len() {  
-                let gizmo_position = self.gizmo_positions[gizmo_index];
-                // If it has been clicked on
-                if self.active_vertex_index != -1 && gizmo_index == self.active_vertex_index as usize {
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        9.0,
-                        white_color,
-                    );
-
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        8.0,
-                        plum_color,
-                    );
-                } else if self.hover_index != -1 && gizmo_index == self.hover_index as usize {
-                // If the index is being hovered over
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        9.0,
-                        peach_color,
-                    );
-
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        8.0,
-                        white_color,
-                    );
-                } else { 
-                // If the state is normal
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        9.0,
-                        white_color,
-                    );
-
-                    overlay_ref.draw_circle(
-                        gizmo_position,
-                        8.0,
-                        peach_color,
-                    );
-                }
-            }
-
-        }
-
+        //let peach_color = Color::rgba(0.98431, 0.39216, 0.47451, alpha);
+        //let white_color = Color::rgba(1.0, 1.0, 1.0, alpha);
+        //let plum_color = Color::rgba(0.16078, 0.19608, 0.32157, alpha);
     }
 
     #[export]
@@ -432,7 +348,6 @@ impl ProdotBuilderPlugin {
         
         if let Some(node) = self.selected_node {
             
-            self.refresh_gizmos_camera(owner, camera);
 
             let input = unsafe { event.assume_safe() };
 
@@ -444,25 +359,13 @@ impl ProdotBuilderPlugin {
                 // Cache if the mouse if hovering over a gizmo
                 let mut hover_index_found = false;
                 
-                /*if self.is_dragging && self.active_vertex_index != -1{
-                    self.gizmo_positions[self.active_vertex_index as usize] = mouse;
-                    self.edit_mesh(owner);
-                   
-                } else { */
-                /*
-                for vertex_index in 0..self.gizmo_positions.len() {
-                    let vertex_pos = self.gizmo_positions[vertex_index];
+                //if self.is_dragging && self.active_vertex_index != -1{
+                    //self.edit_mesh(owner);
                     
-                    if mouse.x > vertex_pos.x - 10.0 &&
-                        mouse.x < vertex_pos.x + 10.0 &&
-                        mouse.y > vertex_pos.y - 10.0 &&
-                        mouse.y < vertex_pos.y + 10.0 { 
-                        self.hover_index = vertex_index as i32;
-                        hover_index_found = true;
-                    }
-                }*/
-                let cam = unsafe { camera.assume_safe() } ;
-                let space_state = unsafe { 
+                //} else {
+                let cam = unsafe { camera.assume_safe() };
+
+                let space_state = unsafe {
                     cam
                         .get_world()
                         .unwrap()
@@ -471,16 +374,14 @@ impl ProdotBuilderPlugin {
                         .unwrap()
                         .assume_safe()
                 };
-                
-                let mut plane: Plane = Plane::new( Vector3::new( 0.0, 0.0, 1.0), 0.0);
-                let origin = cam.project_ray_origin(mouse);
+
+                let mut plane: Plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), 0.0);
+                let origin: Vector3 = cam.project_ray_origin(mouse);
                 let normal: Vector3 = cam.project_ray_normal(mouse);
-                
+
                 let mesh = unsafe { node.assume_safe() };
-                let mesh_script = 
-                    mesh
-                        .cast_instance::<ProdotMesh>()
-                        .unwrap();
+                let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
+                
                 let vertices = 
                     mesh_script
                         .map_mut(|mesh, owner: TRef<MeshInstance>| {
@@ -501,12 +402,12 @@ impl ProdotBuilderPlugin {
                             proj_pos.y > vertex_pos.y - box_size &&
                             proj_pos.y < vertex_pos.y + box_size &&
                             proj_pos.z > vertex_pos.z - box_size &&
-                            proj_pos.z < vertex_pos.z + box_size {
-                            godot_print!("Oyyy");
+                            proj_pos.z < vertex_pos.z + box_size { 
+                            self.hover_index = i as i32;
+                            hover_index_found = true;
                         }
                     }
                 }
-                
                 
                 if !hover_index_found {
                     self.hover_index = -1;
@@ -526,9 +427,6 @@ impl ProdotBuilderPlugin {
                                 self.is_dragging = true;
                                 self.active_vertex_index = self.hover_index;
                                 consume_input = true;
-
-                                self.set_gizmo_position(owner);
-
                             } else {
                                 self.is_dragging = false;
                             }
@@ -633,9 +531,10 @@ impl ProdotBuilderPlugin {
             })
             .ok()
             .unwrap();
-            
+
     }
 
+    /*
     /// Calculates the gizmo locations using the cameras found by a recursive search
     /// through the editor tree.
     ///
@@ -722,7 +621,7 @@ impl ProdotBuilderPlugin {
             
         }
 
-    }
+    }*/
     
     /// Sets the build mode of the plugin
     ///
@@ -737,7 +636,7 @@ impl ProdotBuilderPlugin {
         match self.build_mode {
             BuildMode::Object => {
                 // Toggle the correct button, and untoggle the other buttons
-               
+                
             },
             BuildMode::Vertex => {
                 // Toggle the correct button, and untoggle the other buttons
@@ -745,11 +644,10 @@ impl ProdotBuilderPlugin {
             },
             BuildMode::Face => {
                 // Toggle the correct button, and untoggle the other buttons
-                
             },
             BuildMode::Edge => {
                 // Toggle the correct button, and untoggle the other buttons
-                
+               
             }
         }
     }
@@ -770,8 +668,8 @@ impl ProdotBuilderPlugin {
         let mesh_ref = unsafe { mesh_node.assume_safe().mesh().unwrap() };
         let mesh = unsafe { mesh_ref.assume_safe() };
         let mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
-        let mesh_tool = MeshDataTool::new();
-        mesh_tool.create_from_surface(mesh_array, 0).expect("[Prodot Builder]: Failed to create mesh from surface!");
+        /*let mesh_tool = MeshDataTool::new();
+        mesh_tool.create_from_surface(mesh_array, 0);
         
         let mut active_vertex = mesh_tool.get_vertex(self.active_vertex_index as i64);
         let screen_pos = self.gizmo_positions[self.active_vertex_index as usize];
@@ -779,73 +677,8 @@ impl ProdotBuilderPlugin {
         
         mesh_tool.set_vertex(self.active_vertex_index as i64, active_vertex);
         mesh_array.surface_remove(0);
-        mesh_tool.commit_to_surface(mesh_array).expect("[Prodot Builder]: Failed to commit mesh to surface!");
+        mesh_tool.commit_to_surface(mesh_array);*/
 
-    }
-
-    #[export]
-    fn set_gizmo_position(&mut self, owner: TRef<EditorPlugin>) {
-        if self.gizmo_node == None {
-            unsafe { 
-                let gizzy_scene = self.gizmo_scene.clone();
-                let gizzy =   
-                       gizzy_scene 
-                            .unwrap()
-                            .clone()
-                            .assume_safe()
-                            .instance(PackedScene::GEN_EDIT_STATE_INSTANCE)
-                            .unwrap()
-                            .assume_safe()
-                            .cast::<Spatial>()
-                            .unwrap();
-                    
-                let editor = EditorPlugin::get_editor_interface(owner.as_ref()).unwrap();
-                let root_node = editor.assume_safe().get_edited_scene_root().unwrap().assume_safe();
-
-                root_node.add_child(gizzy, false);
-                gizzy.set_owner(root_node);
-                
-                self.gizmo_node = Some( gizzy.claim() );
-            }
-                    
-        }
-
-        if self.selected_node == None {
-            return
-        }
-
-        if let Some(gizmo_ref) = self.gizmo_node {
-            let gizmo = unsafe { gizmo_ref.assume_safe() };
-            match self.build_mode {
-                BuildMode::Object => {
-
-                },
-                BuildMode::Vertex => {
-                    if self.active_vertex_index != -1 {
-                        let vertex_pos: Vector2 = self.gizmo_positions[self.active_vertex_index as usize];
-                        let mesh_pos: Vector3 = unsafe {
-                            self.selected_node
-                                .unwrap()
-                                .assume_safe()
-                                .global_transform()
-                                .origin
-                        };
-                        //gizmo.global_translate(mesh_pos + Vector3::new(vertex_pos.x, vertex_pos.y, 0.0));
-                        //gizmo.global_translate(mesh_pos + V);
-                        
-                    }
-                },
-                BuildMode::Face => {
-
-                },
-                BuildMode::Edge => {
-
-                },
-            }
-
-            
-        }
-        
     }
 
 }
