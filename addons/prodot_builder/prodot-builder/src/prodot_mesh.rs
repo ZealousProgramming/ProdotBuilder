@@ -15,8 +15,11 @@ pub struct ProdotMesh {
     hover_color: Color,
     selected_color: Color,
     handle_x_color: Color,
+    handle_x_color_hover: Color,
     handle_y_color: Color,
+    handle_y_color_hover: Color,
     handle_z_color: Color,
+    handle_z_color_hover: Color,
     handle_dist: f32,
 }
 
@@ -32,9 +35,15 @@ impl ProdotMesh {
             normal_color: Color::rgba(0.2, 0.2, 0.2, 0.9),
             hover_color: Color::rgba(0.5, 0.5, 0.5, 0.9),
             selected_color: Color::rgba(0.05, 0.05, 0.05, 0.9),
-            handle_x_color: Color::rgba(0.98039, 0.60784, 0.60784, 1.0),
-            handle_y_color: Color::rgba(0.64706, 0.93725, 0.67451, 1.0),
-            handle_z_color: Color::rgba(0.57255, 0.63529, 0.84314, 1.0),
+            //handle_x_color: Color::rgba(0.98039, 0.60784, 0.60784, 0.7),
+            handle_x_color: Color::rgba(1.0, 0.0, 0.0, 0.7),
+            handle_x_color_hover: Color::rgba(0.98039, 0.60784, 0.60784, 1.0),
+            //handle_y_color: Color::rgba(0.64706, 0.93725, 0.67451, 0.7),
+            handle_y_color: Color::rgba(0.0, 1.0, 0.0, 0.7),
+            handle_y_color_hover: Color::rgba(0.64706, 0.93725, 0.67451, 1.0),
+            //handle_z_color: Color::rgba(0.57255, 0.63529, 0.84314, 0.7),
+            handle_z_color: Color::rgba(0.0, 0.0, 1.0, 0.7),
+            handle_z_color_hover: Color::rgba(0.57255, 0.63529, 0.84314, 1.0),
             handle_dist: 0.15,
         }
     }
@@ -71,7 +80,7 @@ impl ProdotMesh {
     }
 
     #[export]
-    pub fn draw_vertices(&mut self, _owner: TRef<MeshInstance>, selected_index: i32, hover_index: i32) {
+    pub fn draw_vertices(&mut self, _owner: TRef<MeshInstance>, selected_index: i32, hover_index: i32, hovering_gizmo_axis: Vector3) {
         if self.vertices.len() > 0 {
             let geo = unsafe { self.imm_geo.unwrap().assume_safe() };
             geo.clear();
@@ -193,7 +202,11 @@ impl ProdotMesh {
                 let mut gizmo_dist: Vector3 = Vector3::new(self.handle_dist, 0.0, 0.0);
                 let vertex: Vector3 = self.vertices.get(selected_index);
                 let depth = half_depth * 2.0;
-                geo.set_color(self.handle_x_color);
+                if hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+                    geo.set_color(self.handle_x_color_hover);
+                } else {
+                    geo.set_color(self.handle_x_color);
+                }
                 //bl
                 geo.add_vertex(vertex + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
                 //tl
@@ -211,8 +224,12 @@ impl ProdotMesh {
                 geo.add_vertex(vertex + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
 
                 // Y plane
+                if hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+                    geo.set_color(self.handle_y_color_hover);
+                } else {
+                    geo.set_color(self.handle_y_color);
+                }
                 gizmo_dist = Vector3::new(0.0, self.handle_dist, 0.0);
-                geo.set_color(self.handle_y_color);
 
                 //bl
                 geo.add_vertex(vertex + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
@@ -232,7 +249,11 @@ impl ProdotMesh {
                 
                 // Z plane
                 gizmo_dist = Vector3::new(0.0, 0.0, self.handle_dist);
-                geo.set_color(self.handle_z_color);
+                if hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+                    geo.set_color(self.handle_z_color_hover);
+                } else {
+                    geo.set_color(self.handle_z_color);
+                }
 
                 //bl
                 geo.add_vertex(vertex + gizmo_dist + Vector3::new(0.0, -half_height, half_depth));

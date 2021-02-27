@@ -63,6 +63,7 @@ pub struct ProdotBuilderPlugin {
     selected_node: Option<Ref<MeshInstance, Shared>>,
     active_vertex_index: i32,
     hover_index: i32,
+    hovering_gizmo_axis: Vector3,
     build_mode: BuildMode,
     object_mode_button: Option<Ref<Button, Shared>>,
     vertex_mode_button: Option<Ref<Button, Shared>>,
@@ -82,6 +83,7 @@ impl ProdotBuilderPlugin {
             selected_node: None,
             active_vertex_index: -1,
             hover_index: -1,
+            hovering_gizmo_axis: Vector3::zero(),
             build_mode: BuildMode::Vertex,
             object_mode_button: None,
             vertex_mode_button: None,
@@ -289,7 +291,7 @@ impl ProdotBuilderPlugin {
                             let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
                             mesh_script
                                 .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                                    mesh.draw_vertices(owner, self.active_vertex_index, self.hover_index);
+                                    mesh.draw_vertices(owner, self.active_vertex_index, self.hover_index, self.hovering_gizmo_axis);
                                 })
                                 .ok()
                                 .unwrap();
@@ -365,15 +367,6 @@ impl ProdotBuilderPlugin {
                 //} else {
                 let cam = unsafe { camera.assume_safe() };
 
-                let space_state = unsafe {
-                    cam
-                        .get_world()
-                        .unwrap()
-                        .assume_safe()
-                        .direct_space_state()
-                        .unwrap()
-                        .assume_safe()
-                };
 
                 let mut plane: Plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), 0.0);
                 let origin: Vector3 = cam.project_ray_origin(mouse);
@@ -381,7 +374,6 @@ impl ProdotBuilderPlugin {
 
                 let mesh = unsafe { node.assume_safe() };
                 let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
-                
                 let vertices = 
                     mesh_script
                         .map_mut(|mesh, owner: TRef<MeshInstance>| {
@@ -390,10 +382,12 @@ impl ProdotBuilderPlugin {
                         .ok()
                         .unwrap();
 
-                let box_size: f32 = 0.05;
+                let mut box_size: f32 = 0.1;
 
                 for i in 0..vertices.len() {
-                    let vertex_pos = vertices.get(i);
+                    let base_pos: Vector3 = vertices.get(i) + mesh.global_transform().origin;
+
+                    let vertex_pos = base_pos;
                     plane.d = vertex_pos.z;
                     
                     if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
@@ -408,6 +402,62 @@ impl ProdotBuilderPlugin {
                         }
                     }
                 }
+                
+                // Check to see if the mouse if hovering over a gizmo on the selected vertex
+                if self.active_vertex_index != -1 {
+                    let vertex_pos = vertices.get(self.active_vertex_index) + mesh.global_transform().origin;
+                    plane.d = vertex_pos.z;
+                    let gizmo_dist = 0.15 as f32;
+                    box_size = 0.05;
+
+                    let mut hovering_gizmo = false;
+                    let mut gizmo_plane = Vector3::new(1.0, 0.0, 0.0);
+                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                        // X_Plane
+                        let x_plane = gizmo_plane * gizmo_dist;
+                        if proj_pos.x > vertex_pos.x - box_size + gizmo_dist &&
+                            proj_pos.x < vertex_pos.x + box_size + gizmo_dist &&
+                            proj_pos.y > vertex_pos.y - box_size &&
+                            proj_pos.y < vertex_pos.y + box_size {
+                            self.hovering_gizmo_axis = Vector3::new(1.0, 0.0, 0.0);
+                            hovering_gizmo = true;
+                        }
+                        
+                        // Y_Plane
+                        gizmo_plane = Vector3::new(0.0, 1.0, 0.0);
+                        let y_plane = gizmo_plane * gizmo_dist;
+                        if proj_pos.x > vertex_pos.x - box_size &&
+                            proj_pos.x < vertex_pos.x + box_size &&
+                            proj_pos.y > vertex_pos.y - box_size + gizmo_dist &&
+                            proj_pos.y < vertex_pos.y + box_size + gizmo_dist {
+                            self.hovering_gizmo_axis = Vector3::new(0.0, 1.0, 0.0);
+                            hovering_gizmo = true;
+                        }
+                                            
+
+                    }
+                    
+                    plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
+                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                        // Z_Plane
+                        gizmo_plane = Vector3::new(0.0, 0.0, 1.0);
+                        let z_plane = gizmo_plane * gizmo_dist;
+                        if proj_pos.y > vertex_pos.y - box_size &&
+                            proj_pos.y < vertex_pos.y + box_size &&
+                            proj_pos.z > vertex_pos.z - box_size + gizmo_dist &&
+                            proj_pos.z < vertex_pos.z + box_size + gizmo_dist {
+                            self.hovering_gizmo_axis = Vector3::new(0.0, 0.0, 1.0);
+                            hovering_gizmo = true;
+                        }
+                    }
+
+
+                    if !hovering_gizmo {
+                        self.hovering_gizmo_axis = Vector3::zero();
+                    }
+
+                }
+
                 
                 if !hover_index_found {
                     self.hover_index = -1;
