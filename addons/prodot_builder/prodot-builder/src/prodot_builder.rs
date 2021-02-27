@@ -12,8 +12,8 @@ use gdnative::api::{
     MeshInstance,
     //MeshDataTool,
     Object,
-    Texture,
-    Script,
+    //Texture,
+    //Script,
     //Spatial,
     PackedScene,
     //Viewport,
@@ -125,12 +125,14 @@ impl ProdotBuilderPlugin {
         };
 
         owner.add_control_to_dock(EditorPlugin::DOCK_SLOT_RIGHT_BL, self.dock.unwrap());
-
+        
+        /*
         let script = unsafe {
             load_resource::<Script>("res://addons/prodot_builder/prodot_mesh.gdns", "Script")
                 .unwrap()
         };
         let texture = unsafe { load_resource::<Texture>("res://addons/prodot_builder/textures/mesh_icon_v5.png", "Texture").unwrap() };
+        */
         //owner.add_custom_type("ProdotMesh", "MeshInstance", script, texture);
 
         let create_cube_button = unsafe {
@@ -280,9 +282,8 @@ impl ProdotBuilderPlugin {
                 let editor_instance = unsafe { EditorPlugin::get_editor_interface(&owner).unwrap().assume_safe() };
                 let selection = unsafe { editor_instance.get_selection().unwrap().assume_safe() };
                 if selection.get_selected_nodes().len() == 0 {
-                    self.selected_node = None;
                     self.reset(owner);
-                    owner.update_overlays();
+                    self.selected_node = None;
                 } else {
                     match self.build_mode {
                         BuildMode::Object => {},
@@ -309,11 +310,10 @@ impl ProdotBuilderPlugin {
     /// Sends the plugin the object that is being edited.
     ///
     #[export]
-    fn edit(&mut self, owner: TRef<EditorPlugin>, object: Ref<Object>) {
+    fn edit(&mut self, _owner: TRef<EditorPlugin>, object: Ref<Object>) {
         match unsafe { object.assume_safe().cast::<MeshInstance>() } {
             Some(node) => {
                 self.selected_node = Some(node.claim());
-                owner.update_overlays();
             }
             None => self.selected_node = None,
         }
@@ -325,16 +325,17 @@ impl ProdotBuilderPlugin {
             Some(_node) => {
                 return true;
             }
-            None => self.selected_node = None,
+            None =>{
+                self.reset(owner);
+                self.selected_node = None
+            },
         }
-        self.reset(owner);
-        owner.update_overlays();
         return false;
     }
 
     #[export]
     fn forward_spatial_force_draw_over_viewport(
-        &mut self, _owner: TRef<EditorPlugin>, overlay: Ref<Control>,
+        &mut self, _owner: TRef<EditorPlugin>, _overlay: Ref<Control>,
     ) {
         //let peach_color = Color::rgba(0.98431, 0.39216, 0.47451, alpha);
         //let white_color = Color::rgba(1.0, 1.0, 1.0, alpha);
@@ -411,10 +412,8 @@ impl ProdotBuilderPlugin {
                     box_size = 0.05;
 
                     let mut hovering_gizmo = false;
-                    let mut gizmo_plane = Vector3::new(1.0, 0.0, 0.0);
                     if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
                         // X_Plane
-                        let x_plane = gizmo_plane * gizmo_dist;
                         if proj_pos.x > vertex_pos.x - box_size + gizmo_dist &&
                             proj_pos.x < vertex_pos.x + box_size + gizmo_dist &&
                             proj_pos.y > vertex_pos.y - box_size &&
@@ -424,8 +423,6 @@ impl ProdotBuilderPlugin {
                         }
                         
                         // Y_Plane
-                        gizmo_plane = Vector3::new(0.0, 1.0, 0.0);
-                        let y_plane = gizmo_plane * gizmo_dist;
                         if proj_pos.x > vertex_pos.x - box_size &&
                             proj_pos.x < vertex_pos.x + box_size &&
                             proj_pos.y > vertex_pos.y - box_size + gizmo_dist &&
@@ -440,8 +437,6 @@ impl ProdotBuilderPlugin {
                     plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
                     if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
                         // Z_Plane
-                        gizmo_plane = Vector3::new(0.0, 0.0, 1.0);
-                        let z_plane = gizmo_plane * gizmo_dist;
                         if proj_pos.y > vertex_pos.y - box_size &&
                             proj_pos.y < vertex_pos.y + box_size &&
                             proj_pos.z > vertex_pos.z - box_size + gizmo_dist &&
@@ -709,15 +704,28 @@ impl ProdotBuilderPlugin {
     fn reset(&mut self, _owner: TRef<EditorPlugin>) {
         self.active_vertex_index = -1;
         self.hover_index = -1;
+        self.hovering_gizmo_axis = Vector3::zero();
+
+        if let Some(mesh_ref) = self.selected_node {
+            let mesh = unsafe { mesh_ref.assume_safe() };
+            let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
+            mesh_script
+                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                    mesh.clear(owner);
+                })
+                .ok()
+                .unwrap();
+        }
+
     }
 
     #[export]
     fn edit_mesh(&mut self, _owner: TRef<EditorPlugin>) {
         let mesh_node = self.selected_node.unwrap();
-        let mesh_pos = unsafe { mesh_node.assume_safe().global_transform().origin };
+        let _mesh_pos = unsafe { mesh_node.assume_safe().global_transform().origin };
         let mesh_ref = unsafe { mesh_node.assume_safe().mesh().unwrap() };
         let mesh = unsafe { mesh_ref.assume_safe() };
-        let mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
+        let _mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
         /*let mesh_tool = MeshDataTool::new();
         mesh_tool.create_from_surface(mesh_array, 0);
         

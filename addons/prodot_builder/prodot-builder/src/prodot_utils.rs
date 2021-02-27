@@ -2,7 +2,7 @@ use gdnative::api::{PackedScene, Resource, ResourceLoader};
 use gdnative::prelude::*;
 use gdnative::GodotObject;
 
-
+#[allow(dead_code)]
 pub unsafe fn load_resource<T>(path: &str, hint: &str) -> Option<Ref<T, Shared>>
 where
     T: GodotObject<RefKind = RefCounted> + SubClass<Resource>,

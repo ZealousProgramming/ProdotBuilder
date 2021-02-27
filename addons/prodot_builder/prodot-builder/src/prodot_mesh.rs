@@ -8,9 +8,9 @@ use gdnative::prelude::*;
 pub struct ProdotMesh {
     imm_geo: Option<Ref<ImmediateGeometry, Shared>>,
     vertices: TypedArray::<Vector3>,
-    uvs: TypedArray::<Vector2>,
-    normals: TypedArray::<Vector3>,
-    indices: TypedArray::<i32>,
+    _uvs: TypedArray::<Vector2>,
+    _normals: TypedArray::<Vector3>,
+    _indices: TypedArray::<i32>,
     normal_color: Color,
     hover_color: Color,
     selected_color: Color,
@@ -29,9 +29,9 @@ impl ProdotMesh {
         ProdotMesh {
             imm_geo: None,
             vertices: TypedArray::<Vector3>::new(),
-            uvs: TypedArray::<Vector2>::new(),
-            normals: TypedArray::<Vector3>::new(),
-            indices: TypedArray::<i32>::new(),
+            _uvs: TypedArray::<Vector2>::new(),
+            _normals: TypedArray::<Vector3>::new(),
+            _indices: TypedArray::<i32>::new(),
             normal_color: Color::rgba(0.2, 0.2, 0.2, 0.9),
             hover_color: Color::rgba(0.5, 0.5, 0.5, 0.9),
             selected_color: Color::rgba(0.05, 0.05, 0.05, 0.9),
@@ -201,7 +201,6 @@ impl ProdotMesh {
                 // X plane
                 let mut gizmo_dist: Vector3 = Vector3::new(self.handle_dist, 0.0, 0.0);
                 let vertex: Vector3 = self.vertices.get(selected_index);
-                let depth = half_depth * 2.0;
                 if hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
                     geo.set_color(self.handle_x_color_hover);
                 } else {
