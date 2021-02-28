@@ -1,9 +1,10 @@
 
 	[02-24-2021]
 ----------------------------------
-[ ] - draw imm_geo box for verticesj
-
-[ ] - Try to manipulate a vertex
-	[ ] - Either try to create a Position3D and 
-		update an linked vertexs position, or 
-		i dunno
+[ ] - Snapping
+Face
+	[ ] - Detect facts in Face mode
+	[ ] - draw over hovered faces
+	[ ] - draw over selected faces
+Vertex
+	[ ] - Delete Vertex

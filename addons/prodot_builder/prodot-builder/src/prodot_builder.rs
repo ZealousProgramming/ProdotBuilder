@@ -337,9 +337,15 @@ impl ProdotBuilderPlugin {
     fn forward_spatial_force_draw_over_viewport(
         &mut self, _owner: TRef<EditorPlugin>, _overlay: Ref<Control>,
     ) {
-        //let peach_color = Color::rgba(0.98431, 0.39216, 0.47451, alpha);
+        let overlay = unsafe { _overlay.assume_safe() };
+        let peach_color = Color::rgba(0.98431, 0.39216, 0.47451, 1.0);
         //let white_color = Color::rgba(1.0, 1.0, 1.0, alpha);
         //let plum_color = Color::rgba(0.16078, 0.19608, 0.32157, alpha);
+        if self.is_dragging {
+            let font = overlay.get_font("font", "").unwrap();
+            let _viewport_size = overlay.size();
+            overlay.draw_string(font, Vector2::new(10.0, -20.0), "Event: Dragging", peach_color, -1);
+        }
     }
 
     #[export]
@@ -362,10 +368,7 @@ impl ProdotBuilderPlugin {
                 // Cache if the mouse if hovering over a gizmo
                 let mut hover_index_found = false;
                 
-                //if self.is_dragging && self.active_vertex_index != -1{
-                    //self.edit_mesh(owner);
-                    
-                //} else {
+                
                 let cam = unsafe { camera.assume_safe() };
 
 
@@ -374,6 +377,7 @@ impl ProdotBuilderPlugin {
                 let normal: Vector3 = cam.project_ray_normal(mouse);
 
                 let mesh = unsafe { node.assume_safe() };
+                let mesh_pos = mesh.global_transform().origin;
                 let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
                 let vertices = 
                     mesh_script
@@ -384,30 +388,67 @@ impl ProdotBuilderPlugin {
                         .unwrap();
 
                 let mut box_size: f32 = 0.1;
+                
+                // Check to see if the user is still dragging, and if so update the position
+                if self.is_dragging && self.active_vertex_index != -1 && self.hovering_gizmo_axis != Vector3::zero() {
+                    let vertex_pos = vertices.get(self.active_vertex_index);
+                    let mut new_pos: Vector3 = vertex_pos; 
+                    if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+                        plane.d = vertex_pos.z;
+                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                            let added_x_pos = Vector3::new(proj_pos.x, vertex_pos.y, vertex_pos.z);
+                            new_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
+                        }
+                    }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+                        plane.d = vertex_pos.z;
+                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                            let added_y_pos = Vector3::new(vertex_pos.x, proj_pos.y, vertex_pos.z);
+                            new_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
+                        }
+                    // Z Plane is calculated on a different plane
+                    }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+                        plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
+                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                            let added_z_pos = Vector3::new(vertex_pos.x, vertex_pos.y, proj_pos.z);
+                            new_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
+                        }
+                    }
+                        
+                    // Check to see if there were changes
+                    if new_pos != vertex_pos {
+                        mesh_script 
+                            .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                mesh.set_vertex(owner, self.active_vertex_index, new_pos);
+                            })
+                            .ok()
+                            .unwrap();
+                    }
+                                        
+                } else {
+                    for i in 0..vertices.len() {
+                        let base_pos: Vector3 = vertices.get(i) + mesh_pos;
 
-                for i in 0..vertices.len() {
-                    let base_pos: Vector3 = vertices.get(i) + mesh.global_transform().origin;
-
-                    let vertex_pos = base_pos;
-                    plane.d = vertex_pos.z;
-                    
-                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                        if proj_pos.x > vertex_pos.x - box_size &&
-                            proj_pos.x < vertex_pos.x + box_size &&
-                            proj_pos.y > vertex_pos.y - box_size &&
-                            proj_pos.y < vertex_pos.y + box_size &&
-                            proj_pos.z > vertex_pos.z - box_size &&
-                            proj_pos.z < vertex_pos.z + box_size { 
-                            self.hover_index = i as i32;
-                            hover_index_found = true;
+                        let vertex_pos = base_pos;
+                        plane.d = vertex_pos.z;
+                        
+                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                            if proj_pos.x > vertex_pos.x - box_size &&
+                                proj_pos.x < vertex_pos.x + box_size &&
+                                proj_pos.y > vertex_pos.y - box_size &&
+                                proj_pos.y < vertex_pos.y + box_size &&
+                                proj_pos.z > vertex_pos.z - box_size &&
+                                proj_pos.z < vertex_pos.z + box_size { 
+                                self.hover_index = i as i32;
+                                hover_index_found = true;
+                            }
                         }
                     }
                 }
                 
                 // Check to see if the mouse if hovering over a gizmo on the selected vertex
-                if self.active_vertex_index != -1 {
-                    let vertex_pos = vertices.get(self.active_vertex_index) + mesh.global_transform().origin;
-                    plane.d = vertex_pos.z;
+                if self.active_vertex_index != -1 && !self.is_dragging {
+                    let vertex_pos = vertices.get(self.active_vertex_index) + mesh_pos;
+                    plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), vertex_pos.z);
                     let gizmo_dist = 0.15 as f32;
                     box_size = 0.05;
 
@@ -465,19 +506,30 @@ impl ProdotBuilderPlugin {
             if let Some(button) = input.cast::<InputEventMouseButton>() {
                 match button.button_index() { 
                     GlobalConstants::BUTTON_LEFT => {
+                        let zero_vector = Vector3::zero();
                         // If we're hovering over a handle
-                        if self.hover_index != -1 {
+                        if self.hover_index != -1 || self.hovering_gizmo_axis != zero_vector{
                             // Was it a press or release event?
                             if button.is_pressed() { 
+                                // Is this a gizmo hover_index
+                                if self.hovering_gizmo_axis != zero_vector {
+                                    //godot_print!("CLICKED!");
+                                } else {
+                                    self.active_vertex_index = self.hover_index;
+                                }
+                            
                                 self.is_dragging = true;
-                                self.active_vertex_index = self.hover_index;
                                 consume_input = true;
+                                owner.update_overlays();
                             } else {
                                 self.is_dragging = false;
                             }
                         } else {
                             if self.is_dragging {
-                                self.is_dragging = false;
+                                if !button.is_pressed() {
+                                    self.is_dragging = false;
+                                    owner.update_overlays();
+                                }
                             }
                         }
                     },
@@ -512,37 +564,115 @@ impl ProdotBuilderPlugin {
         let mut normal_array = TypedArray::<Vector3>::new();
         let mut uv_array = TypedArray::<Vector2>::new();
         let mut vertex_array = TypedArray::<Vector3>::new();
-        //let mut index_array = TypedArray::<i32>::new();
+        let mut index_array = TypedArray::<i32>::new();
 
         arrays.resize(Mesh::ARRAY_MAX as i32);
-        //normal_array.resize(3);
-        //uv_array.resize(3);
-        //vertex_array.resize(3);
-        //index_array.resize(6);
+        
+        // Front face
+        // 
 
-        // Point one
+        //bl
         normal_array.push(Vector3::new(0.0, 0.0, 1.0));
         uv_array.push(Vector2::new(0.0, 0.0));
-        vertex_array.push(Vector3::new(-1.0, -1.0, 0.0));
+        vertex_array.push(Vector3::new(0.0, 0.0, 1.0));
 
-        // Point two
+        // tl
         normal_array.push(Vector3::new(0.0, 0.0, 1.0));
         uv_array.push(Vector2::new(0.0, 1.0));
-        vertex_array.push(Vector3::new(-1.0, 1.0, 0.0));
+        vertex_array.push(Vector3::new(0.0, 1.0, 1.0));
 
-        // Point three
+        // tr 
         normal_array.push(Vector3::new(0.0, 0.0, 1.0));
         uv_array.push(Vector2::new(1.0, 1.0));
-        vertex_array.push(Vector3::new(1.0, 1.0, 0.0));
+        vertex_array.push(Vector3::new(1.0, 1.0, 1.0));
+        
+        // br 
+        normal_array.push(Vector3::new(0.0, 0.0, 1.0));
+        uv_array.push(Vector2::new(1.0, 0.0));
+        vertex_array.push(Vector3::new(1.0, 0.0, 1.0));
+        
+        index_array.push(0);
+        index_array.push(1);
+        index_array.push(2);
 
-        //index_array.push(0);
-        //index_array.push(1);
-        //index_array.push(2);
+        index_array.push(2);
+        index_array.push(3);
+        index_array.push(0);
+
+        // Right face
+        //
+        // tr 
+        normal_array.push(Vector3::new(1.0, 0.0, 0.0));
+        uv_array.push(Vector2::new(1.0, 1.0));
+        vertex_array.push(Vector3::new(1.0, 1.0, 0.0));
+        
+        // br 
+        normal_array.push(Vector3::new(1.0, 0.0, 0.0));
+        uv_array.push(Vector2::new(1.0, 0.0));
+        vertex_array.push(Vector3::new(1.0, 0.0, 0.0));
+        
+        index_array.push(3);
+        index_array.push(2);
+        index_array.push(4);
+
+        index_array.push(4);
+        index_array.push(5);
+        index_array.push(3);
+
+        // Left face
+        //bl
+        normal_array.push(Vector3::new(-1.0, 0.0, 0.0));
+        uv_array.push(Vector2::new(0.0, 0.0));
+        vertex_array.push(Vector3::new(0.0, 0.0, 0.0));
+
+        // tl
+        normal_array.push(Vector3::new(-1.0, 0.0, 0.0));
+        uv_array.push(Vector2::new(0.0, 1.0));
+        vertex_array.push(Vector3::new(0.0, 1.0, 0.0));
+        
+        index_array.push(6);
+        index_array.push(7);
+        index_array.push(1);
+
+        index_array.push(1);
+        index_array.push(0);
+        index_array.push(6);
+
+        // Back Face
+        //
+        index_array.push(5);
+        index_array.push(4);
+        index_array.push(7);
+
+        index_array.push(7);
+        index_array.push(6);
+        index_array.push(5);
+
+        // Top Face
+        // 
+        index_array.push(1);
+        index_array.push(7);
+        index_array.push(4);
+
+        index_array.push(4);
+        index_array.push(2);
+        index_array.push(1);
+
+        // Bottom Face
+        //
+        index_array.push(6);
+        index_array.push(0);
+        index_array.push(3);
+
+
+        index_array.push(3);
+        index_array.push(5);
+        index_array.push(6);
 
         arrays.set(Mesh::ARRAY_VERTEX as i32, vertex_array.clone());
         arrays.set(Mesh::ARRAY_NORMAL as i32, normal_array);
         arrays.set(Mesh::ARRAY_TEX_UV as i32, uv_array);
-        //arrays.set(Mesh::ARRAY_INDEX as i32, index_array);
+        arrays.set(Mesh::ARRAY_INDEX as i32, index_array);
 
         let blend_shapes = VariantArray::new_shared();
         //blend_shapes.resize(Mesh::ARRAY_MAX as i32);
@@ -578,96 +708,6 @@ impl ProdotBuilderPlugin {
             .unwrap();
 
     }
-
-    /*
-    /// Calculates the gizmo locations using the cameras found by a recursive search
-    /// through the editor tree.
-    ///
-    ///
-    #[export]
-    fn refresh_gizmos(&mut self, owner: TRef<EditorPlugin>) {
-        if let Some(mesh_inst) = self.selected_node {
-            let root_node = unsafe { owner.get_tree().unwrap().assume_safe().root().unwrap().assume_safe().upcast::<Node>() };
-            let mesh_node = unsafe { mesh_inst.assume_safe() };
-            let mesh_ref = mesh_node.mesh();
-            match mesh_ref {
-                Some(mesh_ref) => {
-                    let mesh = unsafe { mesh_ref.assume_safe() };
-                    let mesh_array = mesh.surface_get_arrays(Mesh::ARRAY_VERTEX);
-                    let vertex_array = mesh_array.get(0).to_vector3_array();
-
-                    self.gizmo_positions.clear();
-                    
-                    let mut viewports: Vec<Ref<Viewport>> = Vec::new();
-                    self.get_viewports(owner, root_node, viewports.as_mut());
-                    for viewport_ref in viewports {
-                        let viewport = unsafe { viewport_ref.assume_safe() };
-                        if let Some(camera_ref) = viewport.get_camera() {
-                            if viewport.size().length() > 0.0 {
-                                let camera = unsafe { camera_ref.assume_safe()} ;
-
-                                let mesh_position = mesh_node.global_transform().origin;
-                                for i in 0..vertex_array.len() {
-                                    self.gizmo_positions.push(camera.unproject_position(mesh_position + vertex_array.get(i)));
-                                }
-                            }
-                        }
-                    }
-                },
-                None => (),
-            }
-        }
-    }
-    
-    /// Calculates the gizmo locations using the camera supplied.
-    ///
-    ///
-    #[export]
-    fn refresh_gizmos_camera(&mut self, _owner: TRef<EditorPlugin>, camera: Ref<Camera>) {
-        if let Some(mesh_inst) = self.selected_node {
-            let mesh_node = unsafe { mesh_inst.assume_safe() };
-            let mesh_ref = mesh_node.mesh().unwrap();
-            let mesh = unsafe { mesh_ref.assume_safe() };
-            let mesh_array = mesh.surface_get_arrays(Mesh::ARRAY_VERTEX);
-            let vertex_array = mesh_array.get(0).to_vector3_array();
-            
-            self.gizmo_positions.clear();
-
-            let mesh_position = mesh_node.global_transform().origin;
-            
-            for i in 0..vertex_array.len() {
-                unsafe {
-                    self.gizmo_positions
-                        .push(
-                            camera
-                            .assume_safe()
-                            .unproject_position(
-                                mesh_position + 
-                                vertex_array.get(i)
-                            )
-                        )
-                };
-            }
-            
-        }
-    }
-    
-    /// Recursively searches for Viewports in the editor tree.
-    /// Used for obtaining the spatial editor camera.
-    ///
-    fn get_viewports(&self, owner: TRef<EditorPlugin>, root_node: TRef<Node>, viewports: &mut Vec<Ref<Viewport>>){
-
-        for child in root_node.get_children().iter() {
-            let node = unsafe { child.try_to_object::<Node>().unwrap().assume_safe() };
-            if let Some(viewport_ref) = node.cast::<Viewport>()  {
-                viewports.push(viewport_ref.claim());
-            }
-            self.get_viewports(owner, node, viewports);
-            
-        }
-
-    }*/
-    
     /// Sets the build mode of the plugin
     ///
     /// BuildMode::Vertex
@@ -675,7 +715,7 @@ impl ProdotBuilderPlugin {
     /// BuildMode::Edge
     ///
     #[export]
-    pub fn change_build_mode(&mut self, _owner: TRef<EditorPlugin>, mode: i64) {
+    pub fn change_build_mode(&mut self, owner: TRef<EditorPlugin>, mode: i64) {
         self.build_mode = self.build_mode.set(mode);
         godot_print!("[Prodot Builder]: Switched to {:?} mode", self.build_mode);
         match self.build_mode {
@@ -695,6 +735,9 @@ impl ProdotBuilderPlugin {
                
             }
         }
+
+        self.reset(owner);
+
     }
     
     /// Resets the indices of the active index and hover index
@@ -718,25 +761,4 @@ impl ProdotBuilderPlugin {
         }
 
     }
-
-    #[export]
-    fn edit_mesh(&mut self, _owner: TRef<EditorPlugin>) {
-        let mesh_node = self.selected_node.unwrap();
-        let _mesh_pos = unsafe { mesh_node.assume_safe().global_transform().origin };
-        let mesh_ref = unsafe { mesh_node.assume_safe().mesh().unwrap() };
-        let mesh = unsafe { mesh_ref.assume_safe() };
-        let _mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
-        /*let mesh_tool = MeshDataTool::new();
-        mesh_tool.create_from_surface(mesh_array, 0);
-        
-        let mut active_vertex = mesh_tool.get_vertex(self.active_vertex_index as i64);
-        let screen_pos = self.gizmo_positions[self.active_vertex_index as usize];
-        active_vertex = Vector3::new(screen_pos.x, screen_pos.y, mesh_pos.z + active_vertex.z);
-        
-        mesh_tool.set_vertex(self.active_vertex_index as i64, active_vertex);
-        mesh_array.surface_remove(0);
-        mesh_tool.commit_to_surface(mesh_array);*/
-
-    }
-
 }

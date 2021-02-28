@@ -1,4 +1,4 @@
-use gdnative::api::{Mesh, ImmediateGeometry, MeshInstance};
+use gdnative::api::{ArrayMesh, Mesh, MeshDataTool, ImmediateGeometry, MeshInstance};
 use gdnative::prelude::*;
 
 //use crate::prodot_utils::*;
@@ -11,6 +11,8 @@ pub struct ProdotMesh {
     _uvs: TypedArray::<Vector2>,
     _normals: TypedArray::<Vector3>,
     _indices: TypedArray::<i32>,
+    // Holds the indices of the 3 vertices that make up a face
+    faces: TypedArray::<Vector3>,
     normal_color: Color,
     hover_color: Color,
     selected_color: Color,
@@ -32,18 +34,22 @@ impl ProdotMesh {
             _uvs: TypedArray::<Vector2>::new(),
             _normals: TypedArray::<Vector3>::new(),
             _indices: TypedArray::<i32>::new(),
-            normal_color: Color::rgba(0.2, 0.2, 0.2, 0.9),
-            hover_color: Color::rgba(0.5, 0.5, 0.5, 0.9),
-            selected_color: Color::rgba(0.05, 0.05, 0.05, 0.9),
+            faces: TypedArray::<Vector3>::new(),
+            normal_color: Color::rgba(0.4, 0.4, 0.4, 0.8),
+            hover_color: Color::rgba(0.7, 0.7, 0.7, 1.0),
+            selected_color: Color::rgba(0.2, 0.2, 0.2, 1.0),
             //handle_x_color: Color::rgba(0.98039, 0.60784, 0.60784, 0.7),
-            handle_x_color: Color::rgba(1.0, 0.0, 0.0, 0.7),
-            handle_x_color_hover: Color::rgba(0.98039, 0.60784, 0.60784, 1.0),
+            handle_x_color: Color::rgba(0.96078, 0.2, 0.31765, 0.7),
+            //handle_x_color_hover: Color::rgba(0.98039, 0.60784, 0.60784, 1.0),
+            handle_x_color_hover: Color::rgba(0.96078, 0.2, 0.31765, 1.0),
             //handle_y_color: Color::rgba(0.64706, 0.93725, 0.67451, 0.7),
-            handle_y_color: Color::rgba(0.0, 1.0, 0.0, 0.7),
-            handle_y_color_hover: Color::rgba(0.64706, 0.93725, 0.67451, 1.0),
+            handle_y_color: Color::rgba(0.52941, 0.83922, 0.00784, 0.7),
+            //handle_y_color_hover: Color::rgba(0.64706, 0.93725, 0.67451, 1.0),
+            handle_y_color_hover: Color::rgba(0.52941, 0.83922, 0.00784, 1.0),
             //handle_z_color: Color::rgba(0.57255, 0.63529, 0.84314, 0.7),
-            handle_z_color: Color::rgba(0.0, 0.0, 1.0, 0.7),
-            handle_z_color_hover: Color::rgba(0.57255, 0.63529, 0.84314, 1.0),
+            handle_z_color: Color::rgba(0.16078, 0.54902, 0.96078, 0.7),
+            //handle_z_color_hover: Color::rgba(0.57255, 0.63529, 0.84314, 1.0),
+            handle_z_color_hover: Color::rgba(0.16078, 0.54902, 0.96078, 1.0),
             handle_dist: 0.15,
         }
     }
@@ -284,5 +290,26 @@ impl ProdotMesh {
     pub fn set_vertices(&mut self, _owner: TRef<MeshInstance>, vertices: TypedArray<Vector3>) {
         self.vertices = vertices;
     }
+
+    #[export]
+    pub fn set_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
+        self.vertices.set(index, position);
+        self.update_mesh_vertex(owner, index, position);
+    }
+
+    #[export]
+    fn update_mesh_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
+        let mesh_pos = owner.global_transform().origin;
+        let mesh_ref = owner.mesh().unwrap();
+        let mesh = unsafe { mesh_ref.assume_safe() };
+        let mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
+        let mesh_tool = MeshDataTool::new();
+        mesh_tool.create_from_surface(mesh_array, 0).expect("[Prodot Mesh]: Failed to create mesh from surface!");
+        
+        mesh_tool.set_vertex(index as i64, position);
+        mesh_array.surface_remove(0);
+        mesh_tool.commit_to_surface(mesh_array).expect("[Prodot Mesh]: Failed to commit mesh array to surface!");
+    }
+
 
 }
