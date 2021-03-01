@@ -2,6 +2,7 @@
 	[02-24-2021]
 ----------------------------------
 [ ] - Snapping
+[ ] - Multi-selection
 Face
 	[ ] - Detect facts in Face mode
 	[ ] - draw over hovered faces

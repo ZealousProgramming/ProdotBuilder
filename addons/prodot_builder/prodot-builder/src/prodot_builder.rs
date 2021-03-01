@@ -6,6 +6,7 @@ use gdnative::api::{
     InputEvent,
     InputEventMouseButton,
     InputEventMouseMotion,
+    Geometry,
     GlobalConstants,
     Mesh,
     ArrayMesh,
@@ -281,7 +282,7 @@ impl ProdotBuilderPlugin {
             Some(mesh_ref) => {
                 let editor_instance = unsafe { EditorPlugin::get_editor_interface(&owner).unwrap().assume_safe() };
                 let selection = unsafe { editor_instance.get_selection().unwrap().assume_safe() };
-                if selection.get_selected_nodes().len() == 0 {
+                if selection.get_selected_nodes().is_empty() {
                     self.reset(owner);
                     self.selected_node = None;
                 } else {
@@ -297,7 +298,16 @@ impl ProdotBuilderPlugin {
                                 .ok()
                                 .unwrap();
                         },
-                        BuildMode::Face => {},
+                        BuildMode::Face => {
+                            let mesh = unsafe { mesh_ref.assume_safe() };
+                            let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
+                            mesh_script
+                                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                    mesh.draw_faces(owner, self.active_vertex_index, self.hover_index, self.hovering_gizmo_axis);
+                                })
+                                .ok()
+                                .unwrap();
+                        },
                         BuildMode::Edge => {},
                     }
                 }
@@ -330,7 +340,8 @@ impl ProdotBuilderPlugin {
                 self.selected_node = None
             },
         }
-        return false;
+
+        false
     }
 
     #[export]
@@ -379,119 +390,158 @@ impl ProdotBuilderPlugin {
                 let mesh = unsafe { node.assume_safe() };
                 let mesh_pos = mesh.global_transform().origin;
                 let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
-                let vertices = 
-                    mesh_script
-                        .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                            mesh.get_vertices(owner)
-                        })
-                        .ok()
-                        .unwrap();
 
-                let mut box_size: f32 = 0.1;
-                
-                // Check to see if the user is still dragging, and if so update the position
-                if self.is_dragging && self.active_vertex_index != -1 && self.hovering_gizmo_axis != Vector3::zero() {
-                    let vertex_pos = vertices.get(self.active_vertex_index);
-                    let mut new_pos: Vector3 = vertex_pos; 
-                    if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
-                        plane.d = vertex_pos.z;
-                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                            let added_x_pos = Vector3::new(proj_pos.x, vertex_pos.y, vertex_pos.z);
-                            new_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
-                        }
-                    }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
-                        plane.d = vertex_pos.z;
-                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                            let added_y_pos = Vector3::new(vertex_pos.x, proj_pos.y, vertex_pos.z);
-                            new_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
-                        }
-                    // Z Plane is calculated on a different plane
-                    }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
-                        plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
-                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                            let added_z_pos = Vector3::new(vertex_pos.x, vertex_pos.y, proj_pos.z);
-                            new_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
-                        }
-                    }
-                        
-                    // Check to see if there were changes
-                    if new_pos != vertex_pos {
-                        mesh_script 
-                            .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                                mesh.set_vertex(owner, self.active_vertex_index, new_pos);
-                            })
-                            .ok()
-                            .unwrap();
-                    }
-                                        
-                } else {
-                    for i in 0..vertices.len() {
-                        let base_pos: Vector3 = vertices.get(i) + mesh_pos;
+                match self.build_mode {
+                    BuildMode::Object => {
 
-                        let vertex_pos = base_pos;
-                        plane.d = vertex_pos.z;
+                    },
+                    BuildMode::Vertex => {
+                        let vertices = 
+                            mesh_script
+                                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                    mesh.get_vertices(owner)
+                                })
+                                .ok()
+                                .unwrap();
+
+                        let mut box_size: f32 = 0.1;
                         
-                        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                            if proj_pos.x > vertex_pos.x - box_size &&
-                                proj_pos.x < vertex_pos.x + box_size &&
-                                proj_pos.y > vertex_pos.y - box_size &&
-                                proj_pos.y < vertex_pos.y + box_size &&
-                                proj_pos.z > vertex_pos.z - box_size &&
-                                proj_pos.z < vertex_pos.z + box_size { 
-                                self.hover_index = i as i32;
-                                hover_index_found = true;
+                        // Check to see if the user is still dragging, and if so update the position
+                        if self.is_dragging && self.active_vertex_index != -1 && self.hovering_gizmo_axis != Vector3::zero() {
+                            let vertex_pos = vertices.get(self.active_vertex_index);
+                            let mut new_pos: Vector3 = vertex_pos; 
+                            if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+                                plane.d = vertex_pos.z;
+                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                    let added_x_pos = Vector3::new(proj_pos.x, vertex_pos.y, vertex_pos.z);
+                                    new_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
+                                }
+                            }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+                                plane.d = vertex_pos.z;
+                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                    let added_y_pos = Vector3::new(vertex_pos.x, proj_pos.y, vertex_pos.z);
+                                    new_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
+                                }
+                            // Z Plane is calculated on a different plane
+                            }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+                                plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
+                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                    let added_z_pos = Vector3::new(vertex_pos.x, vertex_pos.y, proj_pos.z);
+                                    new_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
+                                }
+                            }
+                                
+                            // Check to see if there were changes
+                            if new_pos != vertex_pos {
+                                mesh_script 
+                                    .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                        mesh.set_vertex(owner, self.active_vertex_index, new_pos);
+                                    })
+                                    .ok()
+                                    .unwrap();
+                            }
+                                                
+                        } else {
+                            for i in 0..vertices.len() {
+                                let base_pos: Vector3 = vertices.get(i) + mesh_pos;
+
+                                let vertex_pos = base_pos;
+                                plane.d = vertex_pos.z;
+                                
+                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                    if proj_pos.x > vertex_pos.x - box_size &&
+                                        proj_pos.x < vertex_pos.x + box_size &&
+                                        proj_pos.y > vertex_pos.y - box_size &&
+                                        proj_pos.y < vertex_pos.y + box_size &&
+                                        proj_pos.z > vertex_pos.z - box_size &&
+                                        proj_pos.z < vertex_pos.z + box_size { 
+                                        self.hover_index = i as i32;
+                                        hover_index_found = true;
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-                
-                // Check to see if the mouse if hovering over a gizmo on the selected vertex
-                if self.active_vertex_index != -1 && !self.is_dragging {
-                    let vertex_pos = vertices.get(self.active_vertex_index) + mesh_pos;
-                    plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), vertex_pos.z);
-                    let gizmo_dist = 0.15 as f32;
-                    box_size = 0.05;
-
-                    let mut hovering_gizmo = false;
-                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                        // X_Plane
-                        if proj_pos.x > vertex_pos.x - box_size + gizmo_dist &&
-                            proj_pos.x < vertex_pos.x + box_size + gizmo_dist &&
-                            proj_pos.y > vertex_pos.y - box_size &&
-                            proj_pos.y < vertex_pos.y + box_size {
-                            self.hovering_gizmo_axis = Vector3::new(1.0, 0.0, 0.0);
-                            hovering_gizmo = true;
-                        }
                         
-                        // Y_Plane
-                        if proj_pos.x > vertex_pos.x - box_size &&
-                            proj_pos.x < vertex_pos.x + box_size &&
-                            proj_pos.y > vertex_pos.y - box_size + gizmo_dist &&
-                            proj_pos.y < vertex_pos.y + box_size + gizmo_dist {
-                            self.hovering_gizmo_axis = Vector3::new(0.0, 1.0, 0.0);
-                            hovering_gizmo = true;
+                        // Check to see if the mouse if hovering over a gizmo on the selected vertex
+                        if self.active_vertex_index != -1 && !self.is_dragging {
+                            let vertex_pos = vertices.get(self.active_vertex_index) + mesh_pos;
+                            plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), vertex_pos.z);
+                            let gizmo_dist: f32 = 0.15;
+                            box_size = 0.05;
+
+                            let mut hovering_gizmo = false;
+                            if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                // X_Plane
+                                if proj_pos.x > vertex_pos.x - box_size + gizmo_dist &&
+                                    proj_pos.x < vertex_pos.x + box_size + gizmo_dist &&
+                                    proj_pos.y > vertex_pos.y - box_size &&
+                                    proj_pos.y < vertex_pos.y + box_size {
+                                    self.hovering_gizmo_axis = Vector3::new(1.0, 0.0, 0.0);
+                                    hovering_gizmo = true;
+                                }
+                                
+                                // Y_Plane
+                                if proj_pos.x > vertex_pos.x - box_size &&
+                                    proj_pos.x < vertex_pos.x + box_size &&
+                                    proj_pos.y > vertex_pos.y - box_size + gizmo_dist &&
+                                    proj_pos.y < vertex_pos.y + box_size + gizmo_dist {
+                                    self.hovering_gizmo_axis = Vector3::new(0.0, 1.0, 0.0);
+                                    hovering_gizmo = true;
+                                }
+                                                    
+
+                            }
+                            
+                            plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
+                            if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                // Z_Plane
+                                if proj_pos.y > vertex_pos.y - box_size &&
+                                    proj_pos.y < vertex_pos.y + box_size &&
+                                    proj_pos.z > vertex_pos.z - box_size + gizmo_dist &&
+                                    proj_pos.z < vertex_pos.z + box_size + gizmo_dist {
+                                    self.hovering_gizmo_axis = Vector3::new(0.0, 0.0, 1.0);
+                                    hovering_gizmo = true;
+                                }
+                            }
+
+
+                            if !hovering_gizmo {
+                                self.hovering_gizmo_axis = Vector3::zero();
+                            }
+
                         }
-                                            
+                    },
+                    BuildMode::Face => {
+                        let geom = Geometry::godot_singleton();
+                        let vertices = 
+                            mesh_script
+                                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                    mesh.get_vertices(owner)
+                                })
+                                .ok()
+                                .unwrap();
+                        // Check faces
+                        let faces: Vec::<Face> = 
+                            mesh_script
+                                .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                    mesh.get_faces(owner)
+                                })
+                                .ok()
+                                .unwrap();
 
-                    }
-                    
-                    plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
-                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                        // Z_Plane
-                        if proj_pos.y > vertex_pos.y - box_size &&
-                            proj_pos.y < vertex_pos.y + box_size &&
-                            proj_pos.z > vertex_pos.z - box_size + gizmo_dist &&
-                            proj_pos.z < vertex_pos.z + box_size + gizmo_dist {
-                            self.hovering_gizmo_axis = Vector3::new(0.0, 0.0, 1.0);
-                            hovering_gizmo = true;
+                        for face in faces {
+                            /*
+                            let result_one = geom.ray_intersects_triangle(
+                                cam.project_ray_origin(mouse),
+                                cam.project_ray_normal(mouse),
+                            );
+                            */
                         }
-                    }
 
+                    },
+                    BuildMode::Edge => {
 
-                    if !hovering_gizmo {
-                        self.hovering_gizmo_axis = Vector3::zero();
-                    }
-
+                    },
                 }
 
                 
@@ -524,13 +574,9 @@ impl ProdotBuilderPlugin {
                             } else {
                                 self.is_dragging = false;
                             }
-                        } else {
-                            if self.is_dragging {
-                                if !button.is_pressed() {
-                                    self.is_dragging = false;
-                                    owner.update_overlays();
-                                }
-                            }
+                        } else if self.is_dragging && !button.is_pressed() {
+                            self.is_dragging = false;
+                            owner.update_overlays();
                         }
                     },
                     _ => (),
@@ -546,7 +592,8 @@ impl ProdotBuilderPlugin {
             
             owner.update_overlays();
         }
-        return consume_input;
+
+        consume_input
     }
 
     /// Creates a default 1x1x1 cube and attaches it to the current
@@ -565,6 +612,7 @@ impl ProdotBuilderPlugin {
         let mut uv_array = TypedArray::<Vector2>::new();
         let mut vertex_array = TypedArray::<Vector3>::new();
         let mut index_array = TypedArray::<i32>::new();
+        let mut face_array = Vec::<Face>::new();
 
         arrays.resize(Mesh::ARRAY_MAX as i32);
         
@@ -598,6 +646,12 @@ impl ProdotBuilderPlugin {
         index_array.push(2);
         index_array.push(3);
         index_array.push(0);
+        
+
+        face_array.push(Face {
+            tris_one: Vector3::new(0.0, 1.0, 2.0),
+            tris_two: Vector3::new(2.0, 3.0, 0.0),
+        });
 
         // Right face
         //
@@ -619,6 +673,11 @@ impl ProdotBuilderPlugin {
         index_array.push(5);
         index_array.push(3);
 
+        face_array.push(Face {
+            tris_one: Vector3::new(3.0, 2.0, 4.0),
+            tris_two: Vector3::new(4.0, 5.0, 3.0),
+        });
+
         // Left face
         //bl
         normal_array.push(Vector3::new(-1.0, 0.0, 0.0));
@@ -638,6 +697,11 @@ impl ProdotBuilderPlugin {
         index_array.push(0);
         index_array.push(6);
 
+        face_array.push(Face {
+            tris_one: Vector3::new(6.0, 7.0, 1.0),
+            tris_two: Vector3::new(1.0, 0.0, 6.0),
+        });
+
         // Back Face
         //
         index_array.push(5);
@@ -647,6 +711,11 @@ impl ProdotBuilderPlugin {
         index_array.push(7);
         index_array.push(6);
         index_array.push(5);
+        
+        face_array.push(Face {
+            tris_one: Vector3::new(5.0, 4.0, 7.0),
+            tris_two: Vector3::new(7.0, 6.0, 5.0),
+        });
 
         // Top Face
         // 
@@ -658,16 +727,26 @@ impl ProdotBuilderPlugin {
         index_array.push(2);
         index_array.push(1);
 
+
+        face_array.push(Face {
+            tris_one: Vector3::new(1.0, 7.0, 4.0),
+            tris_two: Vector3::new(4.0, 2.0, 1.0),
+        });
+
         // Bottom Face
         //
         index_array.push(6);
         index_array.push(0);
         index_array.push(3);
 
-
         index_array.push(3);
         index_array.push(5);
         index_array.push(6);
+        
+        face_array.push(Face {
+            tris_one: Vector3::new(6.0, 0.0, 3.0),
+            tris_two: Vector3::new(3.0, 5.0, 6.0),
+        });
 
         arrays.set(Mesh::ARRAY_VERTEX as i32, vertex_array.clone());
         arrays.set(Mesh::ARRAY_NORMAL as i32, normal_array);
@@ -703,6 +782,7 @@ impl ProdotBuilderPlugin {
         mesh_script
             .map_mut(|mesh, owner: TRef<MeshInstance>| {
                 mesh.set_vertices(owner, vertex_array);
+                mesh.set_faces(owner, face_array);
             })
             .ok()
             .unwrap();
