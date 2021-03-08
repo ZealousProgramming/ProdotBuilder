@@ -23,7 +23,7 @@ impl CreateCubeButton {
     fn _enter_tree(&self, owner: TRef<Button>) {
         owner
             .connect("pressed", owner, "on_click", VariantArray::new_shared(), 0)
-            .unwrap();
+            .expect("[CreateCubeButton]: Error when attempting to connect pressed signal!");
     }
 
     #[export]

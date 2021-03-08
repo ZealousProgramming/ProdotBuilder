@@ -6,6 +6,7 @@ use gdnative::api::{
     InputEvent,
     InputEventMouseButton,
     InputEventMouseMotion,
+    InputEventWithModifiers,
     Geometry,
     GlobalConstants,
     Mesh,
@@ -23,6 +24,10 @@ use gdnative::api::{
 use gdnative::prelude::*;
 use crate::prodot_mesh::*;
 use crate::prodot_utils::*;
+
+use std::collections::HashMap;
+
+//use std::borrow::Borrow;
 
 #[derive(Copy, Clone, Debug, ToVariant, FromVariant)]
 pub enum BuildMode {
@@ -62,7 +67,8 @@ pub struct ProdotBuilderPlugin {
     dock: Option<Ref<Control, Shared>>,
     mesh_scene: Option<Ref<PackedScene, Shared>>,
     selected_node: Option<Ref<MeshInstance, Shared>>,
-    active_vertex_index: i32,
+    selected_indices: Vec::<i32>,
+    vertices_drag_state: HashMap::<i32, Vector3>,
     hover_index: i32,
     hovering_gizmo_axis: Vector3,
     build_mode: BuildMode,
@@ -82,7 +88,8 @@ impl ProdotBuilderPlugin {
             dock: None,
             mesh_scene: None,
             selected_node: None,
-            active_vertex_index: -1,
+            selected_indices: Vec::<i32>::new(),
+            vertices_drag_state: HashMap::<i32, Vector3>::new(),
             hover_index: -1,
             hovering_gizmo_axis: Vector3::zero(),
             build_mode: BuildMode::Vertex,
@@ -293,7 +300,7 @@ impl ProdotBuilderPlugin {
                             let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
                             mesh_script
                                 .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                                    mesh.draw_vertices(owner, self.active_vertex_index, self.hover_index, self.hovering_gizmo_axis);
+                                    mesh.draw_vertices(owner, self.selected_indices.clone(), self.hover_index, self.hovering_gizmo_axis);
                                 })
                                 .ok()
                                 .unwrap();
@@ -303,7 +310,7 @@ impl ProdotBuilderPlugin {
                             let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
                             mesh_script
                                 .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                                    mesh.draw_faces(owner, self.active_vertex_index, self.hover_index, self.hovering_gizmo_axis);
+                                    mesh.draw_faces(owner, self.selected_indices.clone(), self.hover_index, self.hovering_gizmo_axis);
                                 })
                                 .ok()
                                 .unwrap();
@@ -370,6 +377,18 @@ impl ProdotBuilderPlugin {
             
 
             let input = unsafe { event.assume_safe() };
+            let mut control_down = false;
+
+            let mesh = unsafe { node.assume_safe() };
+            let mesh_pos = mesh.global_transform().origin;
+            let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
+
+    // --------------- Input Event With Modifers ------------------------ //
+    //
+            
+            if let Some(modifer) = input.cast::<InputEventWithModifiers>() {
+                control_down = modifer.control();
+            }
 
     // --------------- Mouse Motion Input ------------------------ //
     //
@@ -379,17 +398,11 @@ impl ProdotBuilderPlugin {
                 // Cache if the mouse if hovering over a gizmo
                 let mut hover_index_found = false;
                 
-                
                 let cam = unsafe { camera.assume_safe() };
-
 
                 let mut plane: Plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), 0.0);
                 let origin: Vector3 = cam.project_ray_origin(mouse);
                 let normal: Vector3 = cam.project_ray_normal(mouse);
-
-                let mesh = unsafe { node.assume_safe() };
-                let mesh_pos = mesh.global_transform().origin;
-                let mesh_script = mesh.cast_instance::<ProdotMesh>().unwrap();
 
                 match self.build_mode {
                     BuildMode::Object => {
@@ -404,38 +417,56 @@ impl ProdotBuilderPlugin {
                                 .ok()
                                 .unwrap();
 
-                        let mut box_size: f32 = 0.1;
+                        let box_size: f32 = 0.1;
                         
                         // Check to see if the user is still dragging, and if so update the position
-                        if self.is_dragging && self.active_vertex_index != -1 && self.hovering_gizmo_axis != Vector3::zero() {
-                            let vertex_pos = vertices.get(self.active_vertex_index);
-                            let mut new_pos: Vector3 = vertex_pos; 
-                            if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
-                                plane.d = vertex_pos.z;
-                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                                    let added_x_pos = Vector3::new(proj_pos.x, vertex_pos.y, vertex_pos.z);
-                                    new_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
-                                }
-                            }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
-                                plane.d = vertex_pos.z;
-                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                                    let added_y_pos = Vector3::new(vertex_pos.x, proj_pos.y, vertex_pos.z);
-                                    new_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
-                                }
-                            // Z Plane is calculated on a different plane
-                            }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
-                                plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
-                                if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                                    let added_z_pos = Vector3::new(vertex_pos.x, vertex_pos.y, proj_pos.z);
-                                    new_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
+                        if self.is_dragging && !self.selected_indices.is_empty() && self.hovering_gizmo_axis != Vector3::zero() {
+                            //let vertex_pos = vertices.get(self.active_vertex_index);
+                            let mut moved: bool = false;
+                            let mut new_positions: HashMap<i32, Vector3> = HashMap::<i32, Vector3>::new();
+                            
+                            for index in self.selected_indices.iter() {
+                                let vertex_pos: Vector3 = vertices.get(*index);
+                                let mut g_pos: Vector3; 
+                                if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+                                    plane.d = vertex_pos.z;
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_x_pos = Vector3::new(proj_pos.x, vertex_pos.y, vertex_pos.z);
+                                        g_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
+                                        g_pos.y = 0.0;
+                                        g_pos.z = 0.0;
+                                        moved = true;
+                                        let old_pos = *self.vertices_drag_state.get(&(*index)).unwrap();
+                                        godot_print!("g: {:?}", g_pos);
+                                        new_positions.insert(*index, Vector3::new( g_pos.x, old_pos.y, old_pos.z));
+
+                                        //godot_print!("{:?}", *index);
+                                    }
+                                }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+                                    plane.d = vertex_pos.z;
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_y_pos = Vector3::new(vertex_pos.x, proj_pos.y, vertex_pos.z);
+                                        g_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
+                                        moved = true;
+                                        new_positions.insert(*index, g_pos);
+                                    }
+                                // Z Plane is calculated on a different plane
+                                }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+                                    plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_z_pos = Vector3::new(vertex_pos.x, vertex_pos.y, proj_pos.z);
+                                        g_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
+                                        moved = true;
+                                        new_positions.insert(*index, g_pos);
+                                    }
                                 }
                             }
                                 
                             // Check to see if there were changes
-                            if new_pos != vertex_pos {
+                            if moved {
                                 mesh_script 
                                     .map_mut(|mesh, owner: TRef<MeshInstance>| {
-                                        mesh.set_vertex(owner, self.active_vertex_index, new_pos);
+                                        mesh.set_vertex(owner, new_positions);
                                     })
                                     .ok()
                                     .unwrap();
@@ -463,52 +494,15 @@ impl ProdotBuilderPlugin {
                         }
                         
                         // Check to see if the mouse if hovering over a gizmo on the selected vertex
-                        if self.active_vertex_index != -1 && !self.is_dragging {
-                            let vertex_pos = vertices.get(self.active_vertex_index) + mesh_pos;
-                            plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), vertex_pos.z);
-                            let gizmo_dist: f32 = 0.15;
-                            box_size = 0.05;
-
-                            let mut hovering_gizmo = false;
-                            if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                                // X_Plane
-                                if proj_pos.x > vertex_pos.x - box_size + gizmo_dist &&
-                                    proj_pos.x < vertex_pos.x + box_size + gizmo_dist &&
-                                    proj_pos.y > vertex_pos.y - box_size &&
-                                    proj_pos.y < vertex_pos.y + box_size {
-                                    self.hovering_gizmo_axis = Vector3::new(1.0, 0.0, 0.0);
-                                    hovering_gizmo = true;
-                                }
-                                
-                                // Y_Plane
-                                if proj_pos.x > vertex_pos.x - box_size &&
-                                    proj_pos.x < vertex_pos.x + box_size &&
-                                    proj_pos.y > vertex_pos.y - box_size + gizmo_dist &&
-                                    proj_pos.y < vertex_pos.y + box_size + gizmo_dist {
-                                    self.hovering_gizmo_axis = Vector3::new(0.0, 1.0, 0.0);
-                                    hovering_gizmo = true;
-                                }
-                                                    
-
-                            }
-                            
-                            plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), vertex_pos.x);
-                            if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
-                                // Z_Plane
-                                if proj_pos.y > vertex_pos.y - box_size &&
-                                    proj_pos.y < vertex_pos.y + box_size &&
-                                    proj_pos.z > vertex_pos.z - box_size + gizmo_dist &&
-                                    proj_pos.z < vertex_pos.z + box_size + gizmo_dist {
-                                    self.hovering_gizmo_axis = Vector3::new(0.0, 0.0, 1.0);
-                                    hovering_gizmo = true;
-                                }
-                            }
-
-
-                            if !hovering_gizmo {
-                                self.hovering_gizmo_axis = Vector3::zero();
-                            }
-
+                        if !self.selected_indices.is_empty() && !self.is_dragging {
+                            let vertices_center: Vector3 = 
+                                mesh_script
+                                    .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                        mesh.get_vertices_center(owner, self.selected_indices.clone())
+                                    })
+                                    .ok()
+                                    .unwrap();
+                            self.detect_gizmo(owner, vertices_center + mesh_pos, origin, normal);
                         }
                     },
                     BuildMode::Face => {
@@ -528,15 +522,126 @@ impl ProdotBuilderPlugin {
                                 })
                                 .ok()
                                 .unwrap();
+                        
+                        let mut closest_index = -1;
+                        let mut closest_dist = 10000000.0;
 
-                        for face in faces {
-                            /*
-                            let result_one = geom.ray_intersects_triangle(
-                                cam.project_ray_origin(mouse),
-                                cam.project_ray_normal(mouse),
-                            );
-                            */
-                        }
+                        // Check to see if the user is still dragging, and if so update the position
+                        /*if self.is_dragging && !self.selected_indices.is_empty() && self.hovering_gizmo_axis != Vector3::zero() {
+                            let face_pos: Vector3 =  
+                                mesh_script
+                                    .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                        mesh.get_face_center(owner, self.selected_indices)
+                                    })
+                                    .ok()
+                                    .unwrap();
+                            let mut delta_pos: Vector3 = face_pos; 
+                            let mut moved: bool = false;
+                            let mut updated_faces: HashMap<i32, Vector3> = HashMap::<i32, Vector3>::new();
+
+                            for index in self.selected_indices {
+                                if self.hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+                                    plane.d = face_pos.z;
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_x_pos = Vector3::new(proj_pos.x, face_pos.y, face_pos.z);
+                                        delta_pos = added_x_pos - mesh_pos - Vector3::new(1.0, 0.0, 0.0) * 0.15;
+                                        moved = true;
+                                    }
+                                }else if self.hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+                                    plane.d = face_pos.z;
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_y_pos = Vector3::new(face_pos.x, proj_pos.y, face_pos.z);
+                                        delta_pos = added_y_pos - mesh_pos - Vector3::new(0.0, 1.0, 0.0) * 0.15;
+                                        moved = true;
+                                    }
+                                // Z Plane is calculated on a different plane
+                                }else if self.hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+                                    plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), face_pos.x);
+                                    if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+                                        let added_z_pos = Vector3::new(face_pos.x, face_pos.y, proj_pos.z);
+                                        delta_pos = added_z_pos - mesh_pos - Vector3::new(0.0, 0.0, 1.0) * 0.15;
+                                        moved = true;
+                                    }
+                                }
+                            }
+                                
+                            // Check to see if there were changes
+                            if moved {
+                                mesh_script 
+                                    .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                        mesh.set_face(owner, updated_faces);
+                                    })
+                                    .ok()
+                                    .unwrap();
+                            }
+                        } else {*/
+                            for i in 0..faces.len() {
+                                let face = faces[i];
+                                let vertex_one = mesh_pos + vertices.get(face.tris_one.x as i32);
+                                let vertex_two = mesh_pos + vertices.get(face.tris_one.y as i32);
+                                let vertex_three = mesh_pos + vertices.get(face.tris_one.z as i32);
+                                
+
+                                let vertex_four = mesh_pos + vertices.get(face.tris_two.x as i32);
+                                let vertex_five = mesh_pos + vertices.get(face.tris_two.y as i32);
+                                let vertex_six =  mesh_pos + vertices.get(face.tris_two.z as i32);
+
+                                let result_one = geom.ray_intersects_triangle(
+                                    origin,
+                                    normal,
+                                    vertex_one,
+                                    vertex_two,
+                                    vertex_three
+                                );
+
+                                let result_two = geom.ray_intersects_triangle(
+                                    origin,
+                                    normal,
+                                    vertex_four,
+                                    vertex_five,
+                                    vertex_six
+                                );
+
+                                let mut dist_one = 1000000.0; 
+                                let mut intersects = false; 
+                                if !result_one.is_nil() {
+                                    intersects = true;
+                                    dist_one = origin.distance_to(result_one.to_vector3()).abs();
+                                }
+                                
+                                let mut dist_two = 1000000.0;
+                                if !result_two.is_nil() {
+                                    intersects = true;
+                                    dist_two = origin.distance_to(result_two.to_vector3()).abs();
+                                }
+
+                                if intersects && (dist_one < closest_dist || dist_two < closest_dist) {
+                                    closest_index = i as i32;
+                                    if dist_one <= dist_two {
+                                        closest_dist = dist_one;
+                                    } else {
+                                        closest_dist = dist_two;
+                                    }
+                                }
+                            }
+
+                            if closest_index != -1 {
+                                hover_index_found = true;
+                                self.hover_index = closest_index as i32;
+                            }
+
+                            // Check to see if the mouse if hovering over a gizmo on the selected vertex
+                            if !self.selected_indices.is_empty() && !self.is_dragging {
+                                let face_center = 
+                                    mesh_script
+                                        .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                            mesh.get_face_center(owner, self.selected_indices.clone())
+                                        })
+                                        .ok()
+                                        .unwrap();
+                                self.detect_gizmo(owner, face_center + mesh_pos, origin, normal);
+                            }
+                        //}
 
                     },
                     BuildMode::Edge => {
@@ -550,7 +655,7 @@ impl ProdotBuilderPlugin {
                 }
                 //}
             }
-
+    
     // --------------- Mouse Button Input ------------------------ //
     //
             if let Some(button) = input.cast::<InputEventMouseButton>() {
@@ -563,9 +668,35 @@ impl ProdotBuilderPlugin {
                             if button.is_pressed() { 
                                 // Is this a gizmo hover_index
                                 if self.hovering_gizmo_axis != zero_vector {
-                                    //godot_print!("CLICKED!");
-                                } else {
-                                    self.active_vertex_index = self.hover_index;
+
+                                } else if !self.selected_indices.contains(&self.hover_index) {
+                                    if !self.selected_indices.is_empty() && !control_down {
+                                        self.selected_indices.clear();
+                                        self.vertices_drag_state.clear();
+                                    } 
+                                    self.selected_indices.push(self.hover_index);
+                                    
+                                    // Get the starting vertex position
+                                    let vertex_pos = 
+                                        mesh_script
+                                            .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                                mesh.get_vertex(owner, self.hover_index)
+                                            })
+                                            .ok()
+                                            .unwrap();
+                                    self.vertices_drag_state.insert(self.hover_index, vertex_pos);
+                                } else if control_down{
+                                    let mut index: i32 = -1;
+                                    for i in 0..self.selected_indices.len() {
+                                        if self.selected_indices[i] == self.hover_index {
+                                            index = i as i32;
+                                            break;
+                                        }
+                                    }
+                                    if index != -1 {
+                                        self.vertices_drag_state.remove(&self.selected_indices[index as usize]);
+                                        self.selected_indices.remove(index as usize);
+                                    }
                                 }
                             
                                 self.is_dragging = true;
@@ -573,9 +704,35 @@ impl ProdotBuilderPlugin {
                                 owner.update_overlays();
                             } else {
                                 self.is_dragging = false;
+                                for (index, _position) in self.vertices_drag_state.clone() {
+                                // Get the starting vertex position
+                                let vertex_pos = 
+                                    mesh_script
+                                        .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                            mesh.get_vertex(owner, index)
+                                        })
+                                        .ok()
+                                        .unwrap();
+                                self.vertices_drag_state.insert(index, vertex_pos);
+                            }
+                                //self.vertices_drag_state.clear();
                             }
                         } else if self.is_dragging && !button.is_pressed() {
                             self.is_dragging = false;
+                            //self.vertices_drag_state.clear();
+                            
+                            for (index, _position) in self.vertices_drag_state.clone() {
+                                godot_print!("Update them");
+                                // Get the starting vertex position
+                                let vertex_pos = 
+                                    mesh_script
+                                        .map_mut(|mesh, owner: TRef<MeshInstance>| {
+                                            mesh.get_vertex(owner, index)
+                                        })
+                                        .ok()
+                                        .unwrap();
+                                self.vertices_drag_state.insert(index, vertex_pos);
+                            }
                             owner.update_overlays();
                         }
                     },
@@ -825,7 +982,7 @@ impl ProdotBuilderPlugin {
     ///
     #[export]
     fn reset(&mut self, _owner: TRef<EditorPlugin>) {
-        self.active_vertex_index = -1;
+        self.selected_indices.clear();
         self.hover_index = -1;
         self.hovering_gizmo_axis = Vector3::zero();
 
@@ -841,4 +998,55 @@ impl ProdotBuilderPlugin {
         }
 
     }
+    
+    #[export]
+    fn detect_gizmo(&mut self, _owner: TRef<EditorPlugin>, center: Vector3, origin: Vector3, normal: Vector3) {
+        //let vertex_pos = vertices.get(self.active_vertex_index) + mesh_pos;
+        let mut plane = Plane::new(Vector3::new(0.0, 0.0, 1.0), center.z);
+        let gizmo_dist: f32 = 0.15;
+        let box_size = 0.05;
+
+        let mut hovering_gizmo = false;
+        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+            // X_Plane
+            if proj_pos.x > center.x - box_size + gizmo_dist &&
+                proj_pos.x < center.x + box_size + gizmo_dist &&
+                proj_pos.y > center.y - box_size &&
+                proj_pos.y < center.y + box_size {
+                self.hovering_gizmo_axis = Vector3::new(1.0, 0.0, 0.0);
+                hovering_gizmo = true;
+            }
+            
+            // Y_Plane
+            if proj_pos.x > center.x - box_size &&
+                proj_pos.x < center.x + box_size &&
+                proj_pos.y > center.y - box_size + gizmo_dist &&
+                proj_pos.y < center.y + box_size + gizmo_dist {
+                self.hovering_gizmo_axis = Vector3::new(0.0, 1.0, 0.0);
+                hovering_gizmo = true;
+            }
+                                
+
+        }
+        
+        plane = Plane::new(Vector3::new(1.0, 0.0, 0.0), center.x);
+        if let Some(proj_pos) = plane.intersects_ray(origin, normal) {
+            // Z_Plane
+            if proj_pos.y > center.y - box_size &&
+                proj_pos.y < center.y + box_size &&
+                proj_pos.z > center.z - box_size + gizmo_dist &&
+                proj_pos.z < center.z + box_size + gizmo_dist {
+                self.hovering_gizmo_axis = Vector3::new(0.0, 0.0, 1.0);
+                hovering_gizmo = true;
+            }
+        }
+
+        if !hovering_gizmo {
+            self.hovering_gizmo_axis = Vector3::zero();
+        }
+
+    }
+
+    
+    
 }

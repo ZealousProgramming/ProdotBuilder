@@ -1,25 +1,6 @@
-[gd_scene load_steps=3 format=2]
-
-[ext_resource path="res://addons/prodot_builder/prodot_mesh.tscn" type="PackedScene" id=1]
-
-[sub_resource type="ArrayMesh" id=1]
-surfaces/0 = {
-"aabb": AABB( 0, 0, 0, 1.0087, 1.85383, 1.00001 ),
-"array_data": PoolByteArray( 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 128, 63, 0, 0, 127, 0, 0, 0, 0, 60, 240, 28, 129, 63, 113, 74, 237, 63, 0, 0, 128, 63, 0, 0, 127, 0, 0, 60, 0, 60, 0, 0, 128, 63, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 127, 0, 0, 60, 0, 0, 198, 134, 123, 63, 0, 0, 128, 63, 0, 0, 0, 0, 127, 0, 0, 0, 0, 60, 0, 60, 0, 0, 128, 63, 0, 0, 0, 0, 0, 0, 0, 0, 127, 0, 0, 0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 129, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 129, 0, 0, 0, 0, 0, 0, 60 ),
-"array_index_data": PoolByteArray( 0, 0, 1, 0, 2, 0, 2, 0, 3, 0, 0, 0, 3, 0, 2, 0, 4, 0, 4, 0, 5, 0, 3, 0, 6, 0, 7, 0, 1, 0, 1, 0, 0, 0, 6, 0, 5, 0, 4, 0, 7, 0, 7, 0, 6, 0, 5, 0, 1, 0, 7, 0, 4, 0, 4, 0, 2, 0, 1, 0, 6, 0, 0, 0, 3, 0, 3, 0, 5, 0, 6, 0 ),
-"blend_shape_data": [  ],
-"format": 97555,
-"index_count": 36,
-"primitive": 4,
-"skeleton_aabb": [  ],
-"vertex_count": 8
-}
+[gd_scene format=2]
 
 [node name="World" type="Spatial"]
 
 [node name="DirectionalLight" type="DirectionalLight" parent="."]
 transform = Transform( 0.787772, -0.183013, 0.588151, 0.0327164, 0.965926, 0.256743, -0.615097, -0.183013, 0.766917, 4.08877, 3.15566, 1.57904 )
-
-[node name="ProdotMesh" parent="." instance=ExtResource( 1 )]
-mesh = SubResource( 1 )
-material/0 = null

@@ -1,11 +1,23 @@
 
-	[02-24-2021]
 ----------------------------------
+[ ] - Put the gizmo related things in prodot_mesh.rs into prodot_gizmo.rs, which will be attached to 
+	another ImmediateGeometry node on the mesh that will have a no depth test material on it.
+[x] - ISSUE: Gizmo is no longer relative to position, so it is nowhere near the mesh when the 
+	mesh position is changed.
+[x] - ISSUE: Gizmo detection is now no longer relative to position.
 [ ] - Snapping
-[ ] - Multi-selection
+[o] - Multi-selection
+	[x] - Multple vertices moving at once
+	[x] - Deselect
+	[o] - ISSUE: The vertices are not maintaining their respective distance.
 Face
-	[ ] - Detect facts in Face mode
-	[ ] - draw over hovered faces
-	[ ] - draw over selected faces
+	[x] - Detect facts in Face mode
+	[x] - draw over hovered faces
+	[x] - draw over selected faces
+	[x] - align gizmo with center of face
+	[x] - Detect gizmo hovering
+	[ ] - move face's vertices to the updated location
+		[ ] - update prodot mesh's array
+		[ ] - update mesh
 Vertex
 	[ ] - Delete Vertex

@@ -1,6 +1,8 @@
 use gdnative::api::{ArrayMesh, Mesh, MeshDataTool, ImmediateGeometry, MeshInstance};
 use gdnative::prelude::*;
 
+use std::collections::HashMap;
+
 //use crate::prodot_utils::*;
 #[derive(Copy, Clone, FromVariant, ToVariant)]
 pub struct Face {
@@ -23,6 +25,7 @@ pub struct ProdotMesh {
     selected_color: Color,
     face_normal_color: Color,
     face_outline_color: Color,
+    face_selected_color: Color,
     handle_x_color: Color,
     handle_x_color_hover: Color,
     handle_y_color: Color,
@@ -47,6 +50,7 @@ impl ProdotMesh {
             selected_color: Color::rgba(0.2, 0.2, 0.2, 1.0),
             face_normal_color: Color::rgba(0.80784, 0.64314, 0.94510, 0.5),
             face_outline_color: Color::rgba(0.2, 0.2, 0.2, 1.0),
+            face_selected_color: Color::rgba(0.16078, 0.54902, 0.96078, 0.7),
             //handle_x_color: Color::rgba(0.98039, 0.60784, 0.60784, 0.7),
             handle_x_color: Color::rgba(0.96078, 0.2, 0.31765, 0.7),
             //handle_x_color_hover: Color::rgba(0.98039, 0.60784, 0.60784, 1.0),
@@ -95,10 +99,11 @@ impl ProdotMesh {
     }
 
     #[export]
-    fn draw_gizmo(&mut self, _owner: TRef<MeshInstance>, selected_index: i32, hovering_gizmo_axis: Vector3) {
+    fn draw_gizmo_vertex(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>, hovering_gizmo_axis: Vector3) {
         // X plane
         let mut gizmo_dist: Vector3 = Vector3::new(self.handle_dist, 0.0, 0.0);
-        let vertex: Vector3 = self.vertices.get(selected_index);
+        
+        let vertex: Vector3 = self.get_vertices_center(owner, indices);// self.vertices.get(selected_index);
 
         let half_height = 0.05;
         let half_depth = 0.05;
@@ -178,7 +183,7 @@ impl ProdotMesh {
     }
 
     #[export]
-    pub fn draw_vertices(&mut self, owner: TRef<MeshInstance>, selected_index: i32, hover_index: i32, hovering_gizmo_axis: Vector3) {
+    pub fn draw_vertices(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>, hover_index: i32, hovering_gizmo_axis: Vector3) {
         if !self.vertices.is_empty() {
             let geo = unsafe { self.imm_geo.unwrap().assume_safe() };
             geo.clear();
@@ -193,7 +198,7 @@ impl ProdotMesh {
 
             for i in 0..self.vertices.len() {
                 let vertex = self.vertices.get(i);
-                if selected_index == i {
+                if indices.contains(&(i as i32)) {
                     geo.set_color(self.selected_color);
                 }else if hover_index == i {
                     geo.set_color(self.hover_color);
@@ -293,8 +298,8 @@ impl ProdotMesh {
                 geo.add_vertex(vertex + Vector3::new( -half_length, -half_height, half_depth));
             }
 
-            if selected_index != -1 {
-                self.draw_gizmo(owner, selected_index, hovering_gizmo_axis);
+            if !indices.is_empty(){
+                self.draw_gizmo_vertex(owner, indices, hovering_gizmo_axis);
             }
             geo.end();
         }
@@ -302,7 +307,92 @@ impl ProdotMesh {
     }
 
     #[export]
-    pub fn draw_faces(&mut self, owner: TRef<MeshInstance>, selected_index: i32, hover_index: i32, hovering_gizmo_axis: Vector3) {
+    fn draw_gizmo_face(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>, hovering_gizmo_axis: Vector3) {
+        // Draw center cube
+        let center = self.get_face_center(owner, indices);
+
+        let half_height = 0.05;
+        let half_depth = 0.05;
+        let half_length = 0.05;
+        
+        let geo = unsafe { self.imm_geo.unwrap().assume_safe() };
+
+        if hovering_gizmo_axis == Vector3::new(1.0, 0.0, 0.0) {
+            geo.set_color(self.handle_x_color_hover);
+        } else {
+            geo.set_color(self.handle_x_color);
+        }
+
+        // X plane
+        let mut gizmo_dist: Vector3 = Vector3::new(self.handle_dist, 0.0, 0.0);
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
+        //tl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, half_height, 0.0));
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, half_height, 0.0));
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, half_height, 0.0));
+
+        //br
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, -half_height, 0.0));
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
+
+        // Y plane
+        if hovering_gizmo_axis == Vector3::new(0.0, 1.0, 0.0) {
+            geo.set_color(self.handle_y_color_hover);
+        } else {
+            geo.set_color(self.handle_y_color);
+        }
+        gizmo_dist = Vector3::new(0.0, self.handle_dist, 0.0);
+
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
+        //tl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, half_height, 0.0));
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, half_height, 0.0));
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, half_height, 0.0));
+
+        //br
+        geo.add_vertex(center + gizmo_dist + Vector3::new(half_length, -half_height, 0.0));
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(-half_length, -half_height, 0.0));
+        
+        // Z plane
+        gizmo_dist = Vector3::new(0.0, 0.0, self.handle_dist);
+        if hovering_gizmo_axis == Vector3::new(0.0, 0.0, 1.0) {
+            geo.set_color(self.handle_z_color_hover);
+        } else {
+            geo.set_color(self.handle_z_color);
+        }
+
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, -half_height, half_depth));
+        //tl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, half_height, half_depth)); 
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, half_height, -half_depth));
+
+        //tr
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, half_height, -half_depth));
+
+        //br
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, -half_height, -half_depth));
+        //bl
+        geo.add_vertex(center + gizmo_dist + Vector3::new(0.0, -half_height, half_depth));
+        
+    }
+
+    #[export]
+    pub fn draw_faces(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>, hover_index: i32, hovering_gizmo_axis: Vector3) {
         if !self.faces.is_empty() {
             let geo = unsafe { self.imm_geo.unwrap().assume_safe() };
             geo.clear();
@@ -316,11 +406,13 @@ impl ProdotMesh {
             let outline_thickness = 0.05;
             for i in 0..self.faces.len() {
                 let face = self.faces[i];
-
-                if selected_index == i as i32{
-                    geo.set_color(self.selected_color);
+                let mut draw: bool = false;
+                if indices.contains(&(i as i32)){
+                    geo.set_color(self.face_selected_color);
+                    draw = true;
                 }else if hover_index == i as i32{
-                    geo.set_color(self.hover_color);
+                    geo.set_color(self.face_normal_color);
+                    draw = true;
                 }else {
                     geo.set_color(self.face_outline_color);
                 }
@@ -332,6 +424,16 @@ impl ProdotMesh {
                 let vertex_four = self.vertices.get(face.tris_two.x as i32);
                 let vertex_five = self.vertices.get(face.tris_two.y as i32);
                 let vertex_six  = self.vertices.get(face.tris_two.z as i32);
+
+                if draw {
+                    geo.add_vertex(vertex_one);
+                    geo.add_vertex(vertex_two);
+                    geo.add_vertex(vertex_three);
+                    
+                    geo.add_vertex(vertex_four);
+                    geo.add_vertex(vertex_five);
+                    geo.add_vertex(vertex_six);
+                }
                 
                 //self.draw_edge_lines(owner, vertex_one, vertex_two, vertex_three, outline_thickness);
                                
@@ -390,8 +492,9 @@ impl ProdotMesh {
                 
             }
 
-            if selected_index != -1 {
-                self.draw_gizmo(owner, selected_index, hovering_gizmo_axis);
+            if !indices.is_empty() {
+                
+                self.draw_gizmo_face(owner, indices, hovering_gizmo_axis);
             }
 
             geo.end();
@@ -604,18 +707,46 @@ impl ProdotMesh {
     }
 
     #[export]
+    pub fn get_vertex(&mut self, _owner: TRef<MeshInstance>, index: i32) -> Vector3 {
+        self.vertices.get(index)
+    }
+
+    #[export]
     pub fn set_vertices(&mut self, _owner: TRef<MeshInstance>, vertices: TypedArray<Vector3>) {
         self.vertices = vertices;
     }
 
-    #[export]
-    pub fn set_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
-        self.vertices.set(index, position);
-        self.update_mesh_vertex(owner, index, position);
+    //pub fn set_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
+    pub fn set_vertex(&mut self, owner: TRef<MeshInstance>, updated_vertices: HashMap<i32, Vector3>) {
+        //self.vertices.set(index, position);
+        //self.update_mesh_vertex(owner, index, position);
+        self.update_mesh_vertex(owner, updated_vertices);
     }
 
-    #[export]
-    fn update_mesh_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
+    pub fn get_vertices_center(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>) -> Vector3 {
+        let mesh_pos = owner.global_transform().origin;
+        let num_indices = indices.len();
+        let mut x: f32 = 0.0;
+        let mut y: f32 = 0.0;
+        let mut z: f32 = 0.0;
+
+        for index in indices {
+            let vertex = self.vertices.get(index);
+            x += vertex.x;
+            y += vertex.y;
+            z += vertex.z;
+        }
+
+
+        Vector3::new(
+            x / num_indices as f32,
+            y / num_indices as f32,
+            z / num_indices as f32
+        )
+    }
+
+    //fn update_mesh_vertex(&mut self, owner: TRef<MeshInstance>, index: i32, position: Vector3) {
+    fn update_mesh_vertex(&mut self, owner: TRef<MeshInstance>, updated_vertices: HashMap<i32, Vector3>) {
         //let mesh_pos = owner.global_transform().origin;
         let mesh_ref = owner.mesh().unwrap();
         let mesh = unsafe { mesh_ref.assume_safe() };
@@ -623,7 +754,47 @@ impl ProdotMesh {
         let mesh_tool = MeshDataTool::new();
         mesh_tool.create_from_surface(mesh_array, 0).expect("[Prodot Mesh]: Failed to create mesh from surface!");
         
-        mesh_tool.set_vertex(index as i64, position);
+        for (index, position) in updated_vertices {
+            self.vertices.set(index, position);
+            mesh_tool.set_vertex(index as i64, position);
+        }
+        mesh_array.surface_remove(0);
+        mesh_tool.commit_to_surface(mesh_array).expect("[Prodot Mesh]: Failed to commit mesh array to surface!");
+    }
+
+    fn update_mesh_face(&mut self, owner: TRef<MeshInstance>, updated_faces: HashMap<i32, Vector3>) {
+        let mesh_ref = owner.mesh().unwrap();
+        let mesh = unsafe { mesh_ref.assume_safe() };
+        let mesh_array =  mesh.cast::<ArrayMesh>().unwrap();
+        let mesh_tool = MeshDataTool::new();
+        mesh_tool.create_from_surface(mesh_array, 0).expect("[Prodot Mesh]: Failed to create mesh from surface!");
+        
+        for (index, _position) in updated_faces {
+        //let indices = Vec::<i32>::new();
+        //indices.push(index);
+        //let center = self.get_face_center(owner, indices);
+            let face = self.faces[index as usize];
+            let vertex_one = self.vertices.get(face.tris_one.x as i32);
+            let vertex_two = self.vertices.get(face.tris_one.y as i32);
+            let vertex_three = self.vertices.get(face.tris_one.z as i32);
+            let vertex_four = self.vertices.get(face.tris_two.x as i32);
+            let vertex_five = self.vertices.get(face.tris_two.y as i32);
+            let vertex_six =  self.vertices.get(face.tris_two.z as i32);
+            
+            self.vertices.set(face.tris_one.x as i32, vertex_one);
+            self.vertices.set(face.tris_one.y as i32, vertex_two);
+            self.vertices.set(face.tris_one.z as i32, vertex_three);
+            self.vertices.set(face.tris_two.x as i32, vertex_four);
+            self.vertices.set(face.tris_two.y as i32, vertex_five);
+            self.vertices.set(face.tris_two.z as i32, vertex_six);
+
+            //mesh_tool.set_vertex(face.tris_one.x as i64, vertex_one);
+            //mesh_tool.set_vertex(face.tris_one.y as i64, vertex_two);
+            //mesh_tool.set_vertex(face.tris_one.z as i64, vertex_three);
+            //mesh_tool.set_vertex(face.tris_two.x as i64, vertex_four);
+            //mesh_tool.set_vertex(face.tris_two.y as i64, vertex_five);
+            //mesh_tool.set_vertex(face.tris_two.z as i64, vertex_six);
+        }
         mesh_array.surface_remove(0);
         mesh_tool.commit_to_surface(mesh_array).expect("[Prodot Mesh]: Failed to commit mesh array to surface!");
     }
@@ -636,6 +807,42 @@ impl ProdotMesh {
     #[export]
     pub fn set_faces(&mut self, _owner: TRef<MeshInstance>, faces: Vec<Face>) {
         self.faces = faces;
+    }
+
+    pub fn set_face(&mut self, owner: TRef<MeshInstance>, updated_faces: HashMap<i32, Vector3>) {
+        self.update_mesh_face(owner, updated_faces);
+    }
+
+    #[export]
+    pub fn get_face_center(&mut self, owner: TRef<MeshInstance>, indices: Vec<i32>) -> Vector3 {
+        let mut x: f32 = 0.0;
+        let mut y: f32 = 0.0;
+        let mut z: f32 = 0.0;
+        
+        let mesh_pos = owner.global_transform().origin;
+        let num_indices = indices.len();
+        
+        for i in 0..num_indices {
+            let face = self.faces[i];
+            let vertex_one = mesh_pos + self.vertices.get(face.tris_one.x as i32);
+            let vertex_two = mesh_pos + self.vertices.get(face.tris_one.y as i32);
+            let vertex_three = mesh_pos + self.vertices.get(face.tris_one.z as i32);
+
+            let vertex_four = mesh_pos + self.vertices.get(face.tris_two.x as i32);
+            let vertex_five = mesh_pos + self.vertices.get(face.tris_two.y as i32);
+            let vertex_six =  mesh_pos + self.vertices.get(face.tris_two.z as i32);
+
+            x += vertex_one.x + vertex_two.x + vertex_three.x + vertex_four.x + vertex_five.x + vertex_six.x;
+            y += vertex_one.y + vertex_two.y + vertex_three.y + vertex_four.y + vertex_five.y + vertex_six.y;
+            z += vertex_one.z + vertex_two.z + vertex_three.z + vertex_four.z + vertex_five.z + vertex_six.z;
+        }
+
+        Vector3::new(
+            x / ( 6.0 * num_indices as f32),
+            y / ( 6.0 * num_indices as f32),
+            z / ( 6.0 * num_indices as f32),
+        )
+
     }
 
 

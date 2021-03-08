@@ -29,7 +29,7 @@ _global_script_classes=[ {
 "language": "NativeScript",
 "path": "res://addons/prodot_builder/dock/object_mode_button.gdns"
 }, {
-"base": "EditorPlugin",
+"base": "",
 "class": "ProdotBuilderPlugin",
 "language": "NativeScript",
 "path": "res://addons/prodot_builder/prodot_builder_plugin.gdns"
@@ -39,7 +39,7 @@ _global_script_classes=[ {
 "language": "NativeScript",
 "path": "res://addons/prodot_builder/gizmos/prodot_gizmo.gdns"
 }, {
-"base": "MeshInstance",
+"base": "",
 "class": "ProdotMesh",
 "language": "NativeScript",
 "path": "res://addons/prodot_builder/prodot_mesh.gdns"
